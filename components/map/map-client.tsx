@@ -20,9 +20,10 @@ import { useTheme } from "@/lib/theme-provider";
 import { useAlert } from "@/lib/alert-context";
 import { ALERT_LEVELS } from "@/lib/alert-context";
 import { fetchVolcanoes, fetchBMKG, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
-import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal } from "lucide-react";
+import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal, Satellite } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
+type TileProvider = "osm" | "carto-dark" | "carto-light" | "custom";
 
 const DIRECTION_DEGREES: Record<Direction, number> = {
   N: 0,
@@ -101,6 +102,10 @@ export default function MapClient() {
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
   const [loading, setLoading] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [tileProvider, setTileProvider] = useState<TileProvider>(() => {
+    const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
+    return ["osm", "carto-dark", "carto-light", "custom"].includes(env) ? env : "osm";
+  });
 
   useEffect(() => {
     async function load() {
@@ -134,6 +139,53 @@ export default function MapClient() {
       : [mapCenter[0] + 0.01, mapCenter[1] + 0.01];
 
   const safeZoneCoords: [number, number] = [mapCenter[0] + 0.05, mapCenter[1] + 0.05];
+
+  const tileConfig = useMemo(() => {
+    const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    switch (tileProvider) {
+      case "carto-dark":
+        return key
+          ? {
+              url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${key}`,
+              attribution:
+                '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            }
+          : {
+              url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              attribution:
+                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              missingKey: true,
+            };
+      case "carto-light":
+        return key
+          ? {
+              url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${key}`,
+              attribution:
+                '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            }
+          : {
+              url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+              attribution:
+                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              missingKey: true,
+            };
+      case "custom":
+        return {
+          url:
+            process.env.NEXT_PUBLIC_CUSTOM_TILE_URL ||
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          attribution:
+            process.env.NEXT_PUBLIC_CUSTOM_TILE_ATTRIBUTION ||
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        };
+      default:
+        return {
+          url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        };
+    }
+  }, [tileProvider]);
 
   const accent = theme === "maroon" ? "#d4af37" : "#06b6d4";
   const accentSecondary = theme === "maroon" ? "#f59e0b" : "#3b82f6";
@@ -224,8 +276,9 @@ export default function MapClient() {
       >
         <MapCenter center={mapCenter} zoom={zoom} />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          key={tileProvider}
+          attribution={tileConfig.attribution}
+          url={tileConfig.url}
         />
 
         {layers.kelurahan && (
@@ -304,6 +357,32 @@ export default function MapClient() {
             >
               <X className="h-4 w-4" />
             </button>
+          </div>
+
+          <div className="mb-4 space-y-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+              <Satellite className="h-3.5 w-3.5" /> Basemap
+            </label>
+            <select
+              value={tileProvider}
+              onChange={(e) => setTileProvider(e.target.value as TileProvider)}
+              className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg outline-none focus:border-accent"
+            >
+              <option value="osm">OpenStreetMap (Gratis)</option>
+              <option value="carto-dark">CARTO Dark</option>
+              <option value="carto-light">CARTO Light</option>
+              <option value="custom">Custom / Layanan Lain</option>
+            </select>
+            {tileProvider.startsWith("carto") && tileConfig.missingKey && (
+              <p className="text-xs text-red-400">
+                NEXT_PUBLIC_CARTO_API_KEY belum diset. Fallback ke OSM.
+              </p>
+            )}
+            {tileProvider === "custom" && (
+              <p className="text-[10px] text-fg-muted">
+                Gunakan NEXT_PUBLIC_CUSTOM_TILE_URL dan NEXT_PUBLIC_CUSTOM_TILE_ATTRIBUTION.
+              </p>
+            )}
           </div>
 
         <div className="mb-4">
