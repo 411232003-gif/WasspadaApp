@@ -20,7 +20,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { useAlert } from "@/lib/alert-context";
 import { ALERT_LEVELS } from "@/lib/alert-context";
 import { fetchVolcanoes, fetchBMKG, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
-import { Wind, Layers, Navigation, Info, MapPin } from "lucide-react";
+import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
 
@@ -100,6 +100,7 @@ export default function MapClient() {
   const [volcanoes, setVolcanoes] = useState<Volcano[]>([]);
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
   const [loading, setLoading] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   useEffect(() => {
     async function load() {
@@ -223,8 +224,8 @@ export default function MapClient() {
       >
         <MapCenter center={mapCenter} zoom={zoom} />
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
         {layers.kelurahan && (
@@ -277,11 +278,33 @@ export default function MapClient() {
         )}
       </MapContainer>
 
-      <div className="absolute top-3 right-3 z-[500] w-72 rounded-2xl glass-panel p-4 theme-transition">
-        <div className="mb-4 flex items-center gap-2">
-          <Wind className="h-5 w-5 text-accent" />
-          <h3 className="text-sm font-semibold text-fg">Simulasi Abu Vulkanik</h3>
-        </div>
+      {!panelOpen && (
+        <button
+          onClick={() => setPanelOpen(true)}
+          type="button"
+          className="absolute top-3 right-3 z-[500] rounded-xl glass-panel p-2.5 text-fg hover:bg-white/5"
+          aria-label="Buka panel simulasi"
+        >
+          <SlidersHorizontal className="h-5 w-5 text-accent" />
+        </button>
+      )}
+
+      {panelOpen && (
+        <div className="absolute top-3 right-3 z-[500] w-72 max-h-[80vh] overflow-auto rounded-2xl glass-panel p-4 theme-transition">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wind className="h-5 w-5 text-accent" />
+              <h3 className="text-sm font-semibold text-fg">Simulasi Abu Vulkanik</h3>
+            </div>
+            <button
+              onClick={() => setPanelOpen(false)}
+              type="button"
+              className="rounded-lg p-1 text-fg-muted hover:bg-white/10 hover:text-fg"
+              aria-label="Tutup panel simulasi"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
         <div className="mb-4">
           <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
@@ -377,6 +400,7 @@ export default function MapClient() {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }

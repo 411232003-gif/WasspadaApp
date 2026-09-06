@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin, ChevronDown } from "lucide-react";
+import { MapPin, ChevronDown, Crosshair } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import { fetchWilayah, RegionEntity } from "@/lib/live-api";
 import { useAlert } from "@/lib/alert-context";
@@ -72,6 +72,9 @@ export function KelurahanSelector() {
 
   const displayName = selectedVillage?.name_local || selectedKelurahan?.name_local || "Pilih Wilayah";
 
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
   const handleVillageSelect = (v: RegionEntity | null) => {
     setSelectedVillage(v);
     if (v) {
@@ -80,10 +83,49 @@ export function KelurahanSelector() {
         name: v.name_local,
         lat: v.lat,
         lon: v.lon,
-        note: `${v.name_local} - ${v.parent_name_local}`,
+        note: `${v.name_local} - ${v.parent_name_local || ""}`,
       });
       setOpen(false);
     }
+  };
+
+  const useMyLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationError("Geolocation tidak didukung di perangkat ini.");
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const entity: RegionEntity = {
+          id: `my-location-${Date.now()}`,
+          name_local: "Lokasi Saya",
+          name_en: "My Location",
+          slug: "my-location",
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+        };
+        setSelectedProvince(null);
+        setSelectedRegency(null);
+        setSelectedDistrict(null);
+        setSelectedVillage(entity);
+        setSelectedKelurahan(entity);
+        addBookmark({
+          name: entity.name_local,
+          lat: entity.lat,
+          lon: entity.lon,
+          note: "Lokasi dari GPS perangkat",
+        });
+        setLocating(false);
+        setOpen(false);
+      },
+      () => {
+        setLocating(false);
+        setLocationError("Gagal mengambil lokasi. Pastikan izin lokasi aktif.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   return (
@@ -137,6 +179,21 @@ export function KelurahanSelector() {
             value={selectedVillage}
             onChange={handleVillageSelect}
           />
+
+          <div className="border-t border-card-border pt-3">
+            <button
+              onClick={useMyLocation}
+              disabled={locating}
+              type="button"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent/10 px-3 py-2 text-sm font-medium text-accent hover:bg-accent/20 disabled:opacity-60"
+            >
+              <Crosshair className={`h-4 w-4 ${locating ? "animate-spin" : ""}`} />
+              {locating ? "Mencari lokasi..." : "Gunakan Lokasi Saya"}
+            </button>
+            {locationError && (
+              <p className="mt-2 text-center text-xs text-red-400">{locationError}</p>
+            )}
+          </div>
         </GlassCard>
       )}
     </div>
