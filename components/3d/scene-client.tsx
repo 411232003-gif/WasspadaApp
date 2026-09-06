@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
-import { Flame, Waves, Cloud, RotateCcw, Layers, Eye } from "lucide-react";
+import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal } from "lucide-react";
 
 type ViewMode = "volcano" | "earthquake" | "ash";
 
@@ -239,6 +239,7 @@ export default function SceneClient() {
     rings: true,
     particles: true,
   });
+  const [panelOpen, setPanelOpen] = useState(true);
   const controlsRef = useRef<any>(null);
 
   const isVolcano = view === "volcano";
@@ -301,20 +302,31 @@ export default function SceneClient() {
         />
       </Canvas>
 
-      <div className="absolute top-3 right-3 z-10 w-72 rounded-2xl glass-panel p-4 theme-transition">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-fg">3D Controls</h3>
-          <button
-            onClick={resetView}
-            type="button"
-            className="rounded-lg p-1.5 hover:bg-white/5"
-            title="Reset view"
-          >
-            <RotateCcw className="h-4 w-4 text-accent" />
-          </button>
-        </div>
+      {panelOpen ? (
+        <div className="absolute top-3 right-3 z-10 w-72 rounded-2xl glass-panel p-4 theme-transition">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-fg">3D Controls</h3>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={resetView}
+                type="button"
+                className="rounded-lg p-1.5 hover:bg-white/5"
+                title="Reset view"
+              >
+                <RotateCcw className="h-4 w-4 text-accent" />
+              </button>
+              <button
+                onClick={() => setPanelOpen(false)}
+                type="button"
+                className="rounded-lg p-1.5 hover:bg-white/5"
+                title="Sembunyikan panel"
+              >
+                <X className="h-4 w-4 text-fg" />
+              </button>
+            </div>
+          </div>
 
-        <div className="mb-4 grid grid-cols-3 gap-2">
+          <div className="mb-4 grid grid-cols-3 gap-2">
           <button
             onClick={() => setView("volcano")}
             type="button"
@@ -407,6 +419,16 @@ export default function SceneClient() {
           </div>
         </div>
       </div>
+      ) : (
+        <button
+          onClick={() => setPanelOpen(true)}
+          type="button"
+          className="absolute top-3 right-3 z-10 rounded-2xl glass-panel p-3 shadow-lg theme-transition"
+          title="Buka 3D Controls"
+        >
+          <SlidersHorizontal className="h-5 w-5 text-accent" />
+        </button>
+      )}
     </div>
   );
 }
