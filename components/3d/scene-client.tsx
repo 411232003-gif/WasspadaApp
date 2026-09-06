@@ -4,8 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
-import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal, Info, AlertTriangle, MousePointer2 } from "lucide-react";
+import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal, Info, AlertTriangle, MousePointer2, Wind, Navigation } from "lucide-react";
 import { useAlert, ALERT_LEVELS } from "@/lib/alert-context";
+import {
+  fetchWind,
+  getBearing,
+  cardinalFrom,
+  cardinalTo,
+  type WindData,
+} from "@/lib/live-api";
 
 type ViewMode = "volcano" | "earthquake" | "ash";
 
@@ -15,6 +22,8 @@ interface LayersState {
   rings: boolean;
   particles: boolean;
 }
+
+const SCENE_SCALE = 0.5;
 
 const KRB_RINGS = [
   {
@@ -39,8 +48,6 @@ const KRB_RINGS = [
     desc: "Hujan Abu & Lahar",
   },
 ];
-
-const EPICENTER_POS: [number, number, number] = [-4, 0.1, -4];
 
 function Terrain({ visible }: { visible: boolean }) {
   if (!visible) return null;
@@ -67,10 +74,16 @@ function Terrain({ visible }: { visible: boolean }) {
   );
 }
 
-function VolcanoCone({ visible }: { visible: boolean }) {
+function VolcanoCone({
+  visible,
+  position,
+}: {
+  visible: boolean;
+  position: [number, number, number];
+}) {
   if (!visible) return null;
   return (
-    <group position={[0, 0, 0]}>
+    <group position={position}>
       <mesh position={[0, 1.5, 0]} castShadow>
         <coneGeometry args={[1.5, 3, 32]} />
         <meshStandardMaterial
@@ -89,20 +102,44 @@ function VolcanoCone({ visible }: { visible: boolean }) {
   );
 }
 
-function SmokeParticles({ count = 180, spread = 0.7, visible }: { count?: number; spread?: number; visible: boolean }) {
+function SmokeParticles({
+  count = 180,
+  spread = 0.7,
+  visible,
+  position,
+  windSpeed = 0,
+  windFrom = 0,
+}: {
+  count?: number;
+  spread?: number;
+  visible: boolean;
+  position: [number, number, number];
+  windSpeed?: number;
+  windFrom?: number;
+}) {
   const pointsRef = useRef<THREE.Points>(null);
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const windTo = ((windFrom ?? 0) + 180) % 360;
+  const windDrift = useMemo(() => {
+    const base = windSpeed * 0.05;
+    return {
+      x: Math.sin(toRad(windTo)) * base,
+      z: Math.cos(toRad(windTo)) * base,
+    };
+  }, [windSpeed, windTo]);
+
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
       const angle = Math.random() * Math.PI * 2;
       const r = Math.random() * spread;
-      arr[i3] = Math.cos(angle) * r;
-      arr[i3 + 1] = 3 + Math.random() * 1.2;
-      arr[i3 + 2] = Math.sin(angle) * r;
+      arr[i3] = position[0] + Math.cos(angle) * r;
+      arr[i3 + 1] = position[1] + 3 + Math.random() * 1.2;
+      arr[i3 + 2] = position[2] + Math.sin(angle) * r;
     }
     return arr;
-  }, [count, spread]);
+  }, [count, spread, position]);
 
   const speeds = useMemo(() => {
     return new Float32Array(count).fill(0).map(() => 0.4 + Math.random() * 0.8);
@@ -118,14 +155,14 @@ function SmokeParticles({ count = 180, spread = 0.7, visible }: { count?: number
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
       pos[i3 + 1] += speeds[i] * delta;
-      pos[i3] += drifts[i * 2] * delta;
-      pos[i3 + 2] += drifts[i * 2 + 1] * delta;
-      if (pos[i3 + 1] > 6.5) {
+      pos[i3] += (drifts[i * 2] + windDrift.x) * delta;
+      pos[i3 + 2] += (drifts[i * 2 + 1] + windDrift.z) * delta;
+      if (pos[i3 + 1] > position[1] + 6.5) {
         const angle = Math.random() * Math.PI * 2;
         const r = Math.random() * spread;
-        pos[i3] = Math.cos(angle) * r;
-        pos[i3 + 1] = 3 + Math.random() * 0.5;
-        pos[i3 + 2] = Math.sin(angle) * r;
+        pos[i3] = position[0] + Math.cos(angle) * r;
+        pos[i3 + 1] = position[1] + 3 + Math.random() * 0.5;
+        pos[i3 + 2] = position[2] + Math.sin(angle) * r;
       }
     }
     pointsRef.current.geometry.attributes.position.needsUpdate = true;
@@ -153,7 +190,13 @@ function SmokeParticles({ count = 180, spread = 0.7, visible }: { count?: number
   );
 }
 
-function HazardRings({ visible }: { visible: boolean }) {
+function HazardRings({
+  visible,
+  position,
+}: {
+  visible: boolean;
+  position: [number, number, number];
+}) {
   if (!visible) return null;
   return (
     <group>
@@ -161,9 +204,9 @@ function HazardRings({ visible }: { visible: boolean }) {
         <mesh
           key={ring.radius}
           rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0.05, 0]}
+          position={[position[0], position[1] + 0.05, position[2]]}
         >
-          <torusGeometry args={[ring.radius, 0.06, 16, 100]} />
+          <torusGeometry args={[ring.radius * SCENE_SCALE, 0.06, 16, 100]} />
           <meshBasicMaterial
             color={ring.color}
             transparent
@@ -177,16 +220,16 @@ function HazardRings({ visible }: { visible: boolean }) {
   );
 }
 
-function EpicenterMarker() {
+function EpicenterMarker({ position }: { position: [number, number, number] }) {
   return (
-    <mesh position={EPICENTER_POS}>
+    <mesh position={position}>
       <sphereGeometry args={[0.4, 24, 24]} />
       <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.6} />
     </mesh>
   );
 }
 
-function RippleEffect() {
+function RippleEffect({ position }: { position: [number, number, number] }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
   useFrame((_, delta) => {
@@ -200,7 +243,7 @@ function RippleEffect() {
   });
 
   return (
-    <mesh ref={meshRef} position={EPICENTER_POS} rotation={[-Math.PI / 2, 0, 0]}>
+    <mesh ref={meshRef} position={position} rotation={[-Math.PI / 2, 0, 0]}>
       <ringGeometry args={[0.85, 1, 64]} />
       <meshBasicMaterial
         color="#ef4444"
@@ -214,11 +257,24 @@ function RippleEffect() {
   );
 }
 
-function AshCloud({ visible }: { visible: boolean }) {
+function AshCloud({
+  visible,
+  position,
+  windFrom,
+  windSpeed,
+}: {
+  visible: boolean;
+  position: [number, number, number];
+  windFrom?: number;
+  windSpeed?: number;
+}) {
   if (!visible) return null;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const windTo = ((windFrom ?? 0) + 180) % 360;
+  const plumeLength = Math.min(8, 2 + (windSpeed ?? 0) * 0.25) * SCENE_SCALE;
   return (
     <group>
-      <mesh position={[0, 4, 0]}>
+      <mesh position={[position[0], position[1] + 4, position[2]]}>
         <sphereGeometry args={[2.8, 32, 32]} />
         <meshStandardMaterial
           color="#6b7280"
@@ -227,7 +283,16 @@ function AshCloud({ visible }: { visible: boolean }) {
           depthWrite={false}
         />
       </mesh>
-      <SmokeParticles count={260} spread={1.8} visible />
+      <group
+        position={[position[0], position[1] + 4.2, position[2]]}
+        rotation={[0, -toRad(windTo), 0]}
+      >
+        <mesh position={[0, 0, -plumeLength / 2]}>
+          <boxGeometry args={[1.6 * SCENE_SCALE, 0.6 * SCENE_SCALE, plumeLength]} />
+          <meshStandardMaterial color="#57534e" transparent opacity={0.18} depthWrite={false} />
+        </mesh>
+      </group>
+      <SmokeParticles count={260} spread={1.8} visible position={position} windFrom={windFrom} windSpeed={windSpeed} />
     </group>
   );
 }
@@ -241,8 +306,46 @@ export default function SceneClient() {
     particles: true,
   });
   const [panelOpen, setPanelOpen] = useState(true);
+  const [wind, setWind] = useState<WindData | null>(null);
   const controlsRef = useRef<any>(null);
-  const { nearestVolcano, nearestEarthquake } = useAlert();
+  const { disasterCenter, nearestVolcano, nearestEarthquake } = useAlert();
+
+  useEffect(() => {
+    fetchWind(disasterCenter[0], disasterCenter[1]).then(setWind);
+  }, [disasterCenter[0], disasterCenter[1]]);
+
+  const toRad = (v: number) => (v * Math.PI) / 180;
+
+  const volcanoRel = useMemo(() => {
+    if (!nearestVolcano || nearestVolcano.item.lat == null || nearestVolcano.item.lon == null) {
+      return { position: [0, 0, 0] as [number, number, number], distance: 0, bearing: 0 };
+    }
+    const distance = nearestVolcano.distanceKm;
+    const bearing = getBearing(disasterCenter, [nearestVolcano.item.lat, nearestVolcano.item.lon]);
+    const x = distance * SCENE_SCALE * Math.sin(toRad(bearing));
+    const z = distance * SCENE_SCALE * Math.cos(toRad(bearing));
+    return {
+      position: [x, 0, z] as [number, number, number],
+      distance,
+      bearing,
+    };
+  }, [nearestVolcano, disasterCenter[0], disasterCenter[1]]);
+
+  const earthquakeRel = useMemo(() => {
+    if (!nearestEarthquake || !nearestEarthquake.item.coordinates) {
+      return { position: [-4 * SCENE_SCALE, 0.1, -4 * SCENE_SCALE] as [number, number, number], distance: 0, bearing: 0 };
+    }
+    const [lat, lon] = nearestEarthquake.item.coordinates;
+    const distance = nearestEarthquake.distanceKm;
+    const bearing = getBearing(disasterCenter, [lat, lon]);
+    const x = distance * SCENE_SCALE * Math.sin(toRad(bearing));
+    const z = distance * SCENE_SCALE * Math.cos(toRad(bearing));
+    return {
+      position: [x, 0.1, z] as [number, number, number],
+      distance,
+      bearing,
+    };
+  }, [nearestEarthquake, disasterCenter[0], disasterCenter[1]]);
 
   const isVolcano = view === "volcano";
   const isEarthquake = view === "earthquake";
@@ -272,24 +375,24 @@ export default function SceneClient() {
 
         {isVolcano && (
           <>
-            <VolcanoCone visible={layers.volcano} />
-            <SmokeParticles visible={layers.particles} />
-            <HazardRings visible={layers.rings} />
+            <VolcanoCone visible={layers.volcano} position={volcanoRel.position} />
+            <SmokeParticles visible={layers.particles} position={volcanoRel.position} windFrom={wind?.windDirectionFrom} windSpeed={wind?.windSpeed} />
+            <HazardRings visible={layers.rings} position={volcanoRel.position} />
           </>
         )}
 
         {isEarthquake && (
           <>
-            <EpicenterMarker />
-            <RippleEffect />
-            <SmokeParticles count={120} spread={0.5} visible={layers.particles} />
+            <EpicenterMarker position={earthquakeRel.position} />
+            <RippleEffect position={earthquakeRel.position} />
+            <SmokeParticles count={120} spread={0.5} visible={layers.particles} position={volcanoRel.position} windFrom={wind?.windDirectionFrom} windSpeed={wind?.windSpeed} />
           </>
         )}
 
         {isAsh && (
           <>
-            <VolcanoCone visible={layers.volcano} />
-            <AshCloud visible />
+            <VolcanoCone visible={layers.volcano} position={volcanoRel.position} />
+            <AshCloud visible position={volcanoRel.position} windFrom={wind?.windDirectionFrom} windSpeed={wind?.windSpeed} />
           </>
         )}
 
@@ -299,8 +402,8 @@ export default function SceneClient() {
           enableZoom
           enableRotate
           minDistance={5}
-          maxDistance={40}
-          target={[0, 0, 0]}
+          maxDistance={80}
+          target={volcanoRel.position}
         />
       </Canvas>
 
@@ -407,7 +510,7 @@ export default function SceneClient() {
                   {nearestVolcano.item.name}
                 </p>
                 <p className="text-[10px] text-fg-muted">
-                  {nearestVolcano.item.status} · {nearestVolcano.distanceKm.toFixed(1)} km dari pusat bencana
+                  {nearestVolcano.item.status} · {nearestVolcano.distanceKm.toFixed(1)} km · {cardinalFrom(volcanoRel.bearing)} arah pengguna
                 </p>
               </div>
             )}
@@ -417,7 +520,7 @@ export default function SceneClient() {
                   Gempa M {nearestEarthquake.item.magnitude ?? "-"}
                 </p>
                 <p className="text-[10px] text-fg-muted">
-                  {nearestEarthquake.item.location || "Tidak diketahui"} · {nearestEarthquake.distanceKm.toFixed(1)} km
+                  {nearestEarthquake.item.location || "Tidak diketahui"} · {nearestEarthquake.distanceKm.toFixed(1)} km · {cardinalFrom(earthquakeRel.bearing)}
                 </p>
               </div>
             )}
@@ -430,14 +533,37 @@ export default function SceneClient() {
           </div>
         )}
 
+        {wind && (
+          <div className="mb-4 rounded-xl border border-card-border bg-white/5 p-3">
+            <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+              <Wind className="h-3.5 w-3.5" /> Data Angin (Open-Meteo)
+            </label>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div>
+                <p className="text-fg-muted">Arah angin</p>
+                <p className="font-semibold text-fg">{cardinalFrom(wind.windDirectionFrom)} ({wind.windDirectionFrom}°)</p>
+              </div>
+              <div>
+                <p className="text-fg-muted">Kecepatan</p>
+                <p className="font-semibold text-fg">{wind.windSpeed} km/jam</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-fg-muted">Arah abu vulkanik</p>
+                <p className="font-semibold text-fg">{cardinalTo(wind.windDirectionFrom)} ({wind.windDirectionTo}°)</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-4 rounded-xl border border-card-border bg-white/5 p-3">
           <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
             <MousePointer2 className="h-3.5 w-3.5" /> Cara Menggunakan
           </label>
           <ul className="list-disc space-y-1 pl-4 text-[10px] text-fg-muted">
+            <li>Anda berada di titik tengah (0,0). Gunung & gempa ditampilkan sesuai arah dan jarak nyata.</li>
             <li>Sentuh & seret untuk memutar sudut pandang 3D.</li>
             <li>Pinch / scroll untuk zoom in & zoom out.</li>
-            <li>Pilih mode Radius, Gempa, atau Abu untuk melihat skenario.</li>
+            <li>Mode Abu mengikuti arah angin real-time dari Open-Meteo.</li>
             <li>Aktifkan/nonaktifkan layer di bawah ini.</li>
           </ul>
         </div>

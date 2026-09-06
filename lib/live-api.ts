@@ -141,3 +141,60 @@ export function haversineKm(a: [number, number], b: [number, number]) {
   const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
   return R * c;
 }
+
+export function getBearing(a: [number, number], b: [number, number]): number {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const toDeg = (v: number) => (v * 180) / Math.PI;
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const x = Math.sin(dLon) * Math.cos(lat2);
+  const y =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return (toDeg(Math.atan2(x, y)) + 360) % 360;
+}
+
+export function cardinalFrom(deg: number): string {
+  const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  const i = Math.round(deg / 22.5) % 16;
+  return dirs[i];
+}
+
+export function cardinalTo(degFrom: number): string {
+  return cardinalFrom((degFrom + 180) % 360);
+}
+
+export interface WindData {
+  windSpeed: number;
+  windDirectionFrom: number;
+  windDirectionTo: number;
+  updatedAt: string;
+  error?: string;
+}
+
+export async function fetchWind(lat: number, lon: number): Promise<WindData> {
+  try {
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
+    );
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+    const data = await res.json();
+    const from = data?.current_weather?.winddirection ?? 0;
+    const speed = data?.current_weather?.windspeed ?? 0;
+    return {
+      windSpeed: speed,
+      windDirectionFrom: from,
+      windDirectionTo: (from + 180) % 360,
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (e: any) {
+    return {
+      windSpeed: 0,
+      windDirectionFrom: 0,
+      windDirectionTo: 180,
+      updatedAt: new Date().toISOString(),
+      error: e.message,
+    };
+  }
+}
