@@ -19,7 +19,7 @@ import L from "leaflet";
 import { useTheme } from "@/lib/theme-provider";
 import { useAlert } from "@/lib/alert-context";
 import { ALERT_LEVELS } from "@/lib/alert-context";
-import { fetchVolcanoes, fetchBMKG, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
+import { fetchVolcanoes, fetchBMKG, getBearing, computeDestination, haversineKm, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
 import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal, Satellite } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
@@ -153,7 +153,18 @@ export default function MapClient() {
       ? nearestEarthquake.item.coordinates
       : [mapCenter[0] + 0.01, mapCenter[1] + 0.01];
 
-  const safeZoneCoords: [number, number] = [mapCenter[0] + 0.05, mapCenter[1] + 0.05];
+  const safeZoneCoords: [number, number] = useMemo(() => {
+    if (nearestVolcano?.item.lat != null && nearestVolcano.item.lon != null) {
+      const bearingFromUser = getBearing(mapCenter, [
+        nearestVolcano.item.lat,
+        nearestVolcano.item.lon,
+      ]);
+      const away = (bearingFromUser + 180) % 360;
+      const distance = Math.max(10, nearestVolcano.distanceKm * 1.5);
+      return computeDestination(mapCenter, away, distance);
+    }
+    return computeDestination(mapCenter, 45, 10);
+  }, [mapCenter, nearestVolcano]);
 
   const tileConfig = useMemo(() => {
     const key = cartoApiKey || process.env.NEXT_PUBLIC_CARTO_API_KEY;
@@ -358,10 +369,34 @@ export default function MapClient() {
           />
         )}
         {layers.evacuation && (
-          <Polyline
-            positions={[mapCenter, safeZoneCoords]}
-            pathOptions={evacuationPathOptions}
-          />
+          <>
+            <Polyline
+              positions={[mapCenter, safeZoneCoords]}
+              pathOptions={evacuationPathOptions}
+            />
+            <Circle
+              center={safeZoneCoords}
+              radius={500}
+              pathOptions={{
+                color: "#22d3ee",
+                fillColor: "#22d3ee",
+                fillOpacity: 0.25,
+                weight: 2,
+              }}
+            >
+              <Popup>
+                <div className="text-bg">
+                  <strong>Zona Aman</strong>
+                  <br />
+                  {nearestVolcano
+                    ? `Arah menjauhi ${nearestVolcano.item.name}`
+                    : "Arah evakuasi perkiraan"}
+                  <br />
+                  Jarak: {haversineKm(mapCenter, safeZoneCoords).toFixed(1)} km
+                </div>
+              </Popup>
+            </Circle>
+          </>
         )}
       </MapContainer>
 

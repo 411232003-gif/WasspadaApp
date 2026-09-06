@@ -173,6 +173,31 @@ export interface WindData {
   error?: string;
 }
 
+export function computeDestination(
+  from: [number, number],
+  bearing: number,
+  distanceKm: number
+): [number, number] {
+  const R = 6371;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const toDeg = (v: number) => (v * 180) / Math.PI;
+  const lat1 = toRad(from[0]);
+  const lon1 = toRad(from[1]);
+  const brng = toRad(bearing);
+  const d = distanceKm / R;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) +
+      Math.cos(lat1) * Math.sin(d) * Math.cos(brng)
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
+      Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+    );
+  return [toDeg(lat2), (toDeg(lon2) + 540) % 360 - 180];
+}
+
 export async function fetchWind(lat: number, lon: number): Promise<WindData> {
   try {
     const res = await fetch(
