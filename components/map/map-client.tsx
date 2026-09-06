@@ -106,6 +106,7 @@ export default function MapClient() {
     const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
     return ["osm", "carto-dark", "carto-light", "custom"].includes(env) ? env : "osm";
   });
+  const [cartoApiKey, setCartoApiKey] = useState<string>("");
 
   useEffect(() => {
     async function load() {
@@ -125,6 +126,16 @@ export default function MapClient() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("wasspada-carto-key");
+      if (saved) setCartoApiKey(saved);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const mapCenter = disasterCenter;
   const zoom = selectedKelurahan ? 13 : 5;
 
@@ -141,7 +152,7 @@ export default function MapClient() {
   const safeZoneCoords: [number, number] = [mapCenter[0] + 0.05, mapCenter[1] + 0.05];
 
   const tileConfig = useMemo(() => {
-    const key = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const key = cartoApiKey || process.env.NEXT_PUBLIC_CARTO_API_KEY;
     switch (tileProvider) {
       case "carto-dark":
         return key
@@ -276,7 +287,7 @@ export default function MapClient() {
       >
         <MapCenter center={mapCenter} zoom={zoom} />
         <TileLayer
-          key={tileProvider}
+          key={`${tileProvider}-${cartoApiKey}`}
           attribution={tileConfig.attribution}
           url={tileConfig.url}
         />
@@ -373,10 +384,31 @@ export default function MapClient() {
               <option value="carto-light">CARTO Light</option>
               <option value="custom">Custom / Layanan Lain</option>
             </select>
-            {tileProvider.startsWith("carto") && tileConfig.missingKey && (
-              <p className="text-xs text-red-400">
-                NEXT_PUBLIC_CARTO_API_KEY belum diset. Fallback ke OSM.
-              </p>
+            {tileProvider.startsWith("carto") && (
+              <div className="space-y-1">
+                <input
+                  type="text"
+                  value={cartoApiKey}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    setCartoApiKey(val);
+                    if (typeof window !== "undefined") {
+                      if (val) localStorage.setItem("wasspada-carto-key", val);
+                      else localStorage.removeItem("wasspada-carto-key");
+                    }
+                  }}
+                  placeholder="Masukkan CARTO API key"
+                  className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg placeholder:text-fg-muted outline-none focus:border-accent"
+                />
+                {tileConfig.missingKey && (
+                  <p className="text-xs text-red-400">
+                    CARTO API key belum tersedia. Fallback ke OSM.
+                  </p>
+                )}
+                <p className="text-[10px] text-fg-muted">
+                  Key disimpan lokal di browser. Untuk production, gunakan NEXT_PUBLIC_CARTO_API_KEY di Vercel.
+                </p>
+              </div>
             )}
             {tileProvider === "custom" && (
               <p className="text-[10px] text-fg-muted">
