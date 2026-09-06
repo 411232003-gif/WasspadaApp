@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
-import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal } from "lucide-react";
+import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal, Info, AlertTriangle, MousePointer2 } from "lucide-react";
+import { useAlert, ALERT_LEVELS } from "@/lib/alert-context";
 
 type ViewMode = "volcano" | "earthquake" | "ash";
 
@@ -241,6 +242,7 @@ export default function SceneClient() {
   });
   const [panelOpen, setPanelOpen] = useState(true);
   const controlsRef = useRef<any>(null);
+  const { nearestVolcano, nearestEarthquake } = useAlert();
 
   const isVolcano = view === "volcano";
   const isEarthquake = view === "earthquake";
@@ -392,6 +394,52 @@ export default function SceneClient() {
               </label>
             ))}
           </div>
+        </div>
+
+        {(nearestVolcano || nearestEarthquake) && (
+          <div className="mb-4 rounded-xl border border-card-border bg-white/5 p-3">
+            <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+              <Info className="h-3.5 w-3.5" /> Data Mitigasi Terdekat
+            </label>
+            {nearestVolcano && (
+              <div className="mb-2">
+                <p className="text-xs font-semibold text-fg">
+                  {nearestVolcano.item.name}
+                </p>
+                <p className="text-[10px] text-fg-muted">
+                  {nearestVolcano.item.status} · {nearestVolcano.distanceKm.toFixed(1)} km dari pusat bencana
+                </p>
+              </div>
+            )}
+            {nearestEarthquake && (
+              <div>
+                <p className="text-xs font-semibold text-fg">
+                  Gempa M {nearestEarthquake.item.magnitude ?? "-"}
+                </p>
+                <p className="text-[10px] text-fg-muted">
+                  {nearestEarthquake.item.location || "Tidak diketahui"} · {nearestEarthquake.distanceKm.toFixed(1)} km
+                </p>
+              </div>
+            )}
+            {nearestVolcano && nearestVolcano.item.level >= 3 && (
+              <p className="mt-2 flex items-center gap-1 text-[10px] font-bold text-red-400">
+                <AlertTriangle className="h-3 w-3" />
+                {ALERT_LEVELS[nearestVolcano.item.level].evacuationCue}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mb-4 rounded-xl border border-card-border bg-white/5 p-3">
+          <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+            <MousePointer2 className="h-3.5 w-3.5" /> Cara Menggunakan
+          </label>
+          <ul className="list-disc space-y-1 pl-4 text-[10px] text-fg-muted">
+            <li>Sentuh & seret untuk memutar sudut pandang 3D.</li>
+            <li>Pinch / scroll untuk zoom in & zoom out.</li>
+            <li>Pilih mode Radius, Gempa, atau Abu untuk melihat skenario.</li>
+            <li>Aktifkan/nonaktifkan layer di bawah ini.</li>
+          </ul>
         </div>
 
         <div>
