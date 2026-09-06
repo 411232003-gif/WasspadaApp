@@ -14,62 +14,68 @@ interface RegionEntity {
   postal_code?: string;
 }
 
+type Level = "province" | "regency" | "district" | "village";
+
+// Map the requested child level to the parent endpoint that contains its children.
+const PARENT_ENDPOINT: Record<Level, string> = {
+  province: "province",
+  regency: "province",
+  district: "regency",
+  village: "district",
+};
+
+function normalizeEntity(e: any): RegionEntity | null {
+  if (!e || !e.id || !e.name_local) return null;
+  return {
+    id: String(e.id),
+    name_local: String(e.name_local),
+    name_en: String(e.name_en ?? e.name_local),
+    slug: String(e.slug ?? e.id),
+    lat: typeof e.lat === "number" ? e.lat : 0,
+    lon: typeof e.lon === "number" ? e.lon : 0,
+    parent_id: e.parent_id ? String(e.parent_id) : undefined,
+    parent_name_local: e.parent_name_local ? String(e.parent_name_local) : undefined,
+    postal_code: e.postal_code ? String(e.postal_code) : undefined,
+  };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const level = searchParams.get("level") || "province";
+  const level = (searchParams.get("level") || "province") as Level;
   const slug = searchParams.get("slug");
 
   const base = "https://api.openadmindata.org/api/v1/id";
-  const url = slug
-    ? `${base}/${level}/${slug}.json`
-    : `${base}/${level}.json`;
+  const parent = PARENT_ENDPOINT[level];
+  const url = slug ? `${base}/${parent}/${slug}.json` : `${base}/${parent}.json`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { next: { revalidate: 86400 } });
     if (!res.ok) {
       const text = await res.text();
       return NextResponse.json(
-        { error: `OpenAdminData ${res.status}: ${text}` },
-        { status: res.status }
+        { error: `OpenAdminData ${res.status}: ${text}`, entities: [] },
+        { status: res.status < 500 ? res.status : 502 }
       );
     }
     const data = await res.json();
 
-    let list: RegionEntity[] = [];
-    if (data.entities && Array.isArray(data.entities)) {
-      list = data.entities.map((e: any) => ({
-        id: e.id,
-        name_local: e.name_local,
-        name_en: e.name_en,
-        slug: e.slug,
-        lat: e.lat,
-        lon: e.lon,
-        parent_id: e.parent_id,
-        parent_name_local: e.parent_name_local,
-        postal_code: e.postal_code,
-      }));
-    } else if (data.children && Array.isArray(data.children.entities)) {
-      list = data.children.entities.map((e: any) => ({
-        id: e.id,
-        name_local: e.name_local,
-        name_en: e.name_en,
-        slug: e.slug,
-        lat: e.lat,
-        lon: e.lon,
-        parent_id: e.parent_id,
-        parent_name_local: e.parent_name_local,
-        postal_code: e.postal_code,
-      }));
+    let rawList: any[] = [];
+    if (data.children && Array.isArray(data.children.entities)) {
+      rawList = data.children.entities;
+    } else if (data.entities && Array.isArray(data.entities)) {
+      rawList = data.entities;
     }
 
+    const list = rawList.map(normalizeEntity).filter((e): e is RegionEntity => e !== null);
+
     return NextResponse.json({
-      level: data.level?.key || level,
+      level,
       count: list.length,
       entities: list,
     });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Gagal memuat data wilayah" },
+      { error: error.message || "Gagal memuat data wilayah", entities: [] },
       { status: 502 }
     );
   }
