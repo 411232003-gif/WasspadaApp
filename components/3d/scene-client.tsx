@@ -469,7 +469,7 @@ export default function SceneClient() {
       </Canvas>
 
       {panelOpen ? (
-        <div className="absolute top-3 right-3 z-10 w-64 max-w-[calc(100%-1.5rem)] rounded-2xl glass-panel p-4 theme-transition sm:w-72">
+        <div className="absolute top-3 right-3 z-10 w-64 max-w-[calc(100%-1.5rem)] max-h-[80vh] overflow-auto rounded-2xl glass-panel p-4 theme-transition sm:w-72">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-fg">3D Controls</h3>
             <div className="flex items-center gap-1">
