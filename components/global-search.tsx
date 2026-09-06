@@ -14,12 +14,12 @@ export function GlobalSearch() {
 
   useEffect(() => {
     fetchVolcanoes().then((res) => {
-      if (!res.error) setVolcanoes(res.volcanoes);
+      setVolcanoes(res.error ? [] : res.volcanoes || []);
     });
   }, []);
 
   const filtered = query.trim()
-    ? volcanoes.filter((v) =>
+    ? (volcanoes || []).filter((v) =>
         v.name.toLowerCase().includes(query.toLowerCase())
       )
     : [];

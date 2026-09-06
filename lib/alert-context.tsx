@@ -155,10 +155,10 @@ function playEmergencySiren() {
 
 function getNearestVolcano(
   center: [number, number],
-  volcanoes: Volcano[]
+  volcanoes?: Volcano[]
 ): Nearest<Volcano> | null {
   let best: Nearest<Volcano> | null = null;
-  for (const v of volcanoes) {
+  for (const v of volcanoes || []) {
     if (v.lat == null || v.lon == null) continue;
     const d = haversineKm(center, [v.lat, v.lon]);
     if (!best || d < best.distanceKm) {
@@ -170,10 +170,10 @@ function getNearestVolcano(
 
 function getNearestEarthquake(
   center: [number, number],
-  earthquakes: Earthquake[]
+  earthquakes?: Earthquake[]
 ): Nearest<Earthquake> | null {
   let best: Nearest<Earthquake> | null = null;
-  for (const e of earthquakes) {
+  for (const e of earthquakes || []) {
     if (!e.coordinates) continue;
     const d = haversineKm(center, e.coordinates);
     if (!best || d < best.distanceKm) {
@@ -287,10 +287,10 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
 
-        const volcanoes = volcanoRes.error ? [] : volcanoRes.volcanoes;
+        const volcanoes = (volcanoRes.error ? [] : volcanoRes.volcanoes) || [];
         const earthquakes = bmkgRes.error
-          ? bmkgRes.felt
-          : [bmkgRes.latest, ...bmkgRes.felt].filter(
+          ? bmkgRes.felt || []
+          : [bmkgRes.latest, ...(bmkgRes.felt || [])].filter(
               (e): e is Earthquake => e != null && e.coordinates != null
             );
 

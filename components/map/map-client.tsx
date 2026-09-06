@@ -105,13 +105,13 @@ export default function MapClient() {
     async function load() {
       try {
         const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
-        setVolcanoes(vRes.error ? [] : vRes.volcanoes);
+        setVolcanoes((vRes.error ? [] : vRes.volcanoes) || []);
         const eqs = bRes.error
           ? []
-          : [bRes.latest, ...bRes.felt].filter(
+          : [bRes.latest, ...(bRes.felt || [])].filter(
               (e): e is Earthquake => e != null && e.coordinates != null
             );
-        setEarthquakes(eqs);
+        setEarthquakes(eqs || []);
       } finally {
         setLoading(false);
       }
@@ -165,7 +165,7 @@ export default function MapClient() {
   };
 
   const volcanoMarkers = useMemo(() => {
-    return volcanoes
+    return (volcanoes || [])
       .filter((v) => v.lat != null && v.lon != null)
       .map((v) => {
         const color = ALERT_LEVELS[v.level].color;
@@ -190,12 +190,12 @@ export default function MapClient() {
   }, [volcanoes]);
 
   const earthquakeMarkers = useMemo(() => {
-    return earthquakes.map((e) => {
+    return (earthquakes || []).map((e) => {
       const level = levelFromEarthquake(e.magnitude || 0);
       const color = ALERT_LEVELS[level].color;
       return (
         <Marker
-          key={`e-${e.timestamp || e.location}`}
+          key={`e-${e.timestamp || e.location || Math.random()}`}
           position={e.coordinates as [number, number]}
           icon={getDotIcon(color)}
         >
@@ -239,8 +239,9 @@ export default function MapClient() {
           </Marker>
         )}
 
-        {layers.volcanoes && (
+        {layers.volcanoes && volcanoMarkers.length > 0 && (
           <MarkerClusterGroup
+            key="volcano-cluster"
             showCoverageOnHover={false}
             spiderfyDistanceMultiplier={2}
           >
@@ -248,8 +249,9 @@ export default function MapClient() {
           </MarkerClusterGroup>
         )}
 
-        {layers.earthquake && (
+        {layers.earthquake && earthquakeMarkers.length > 0 && (
           <MarkerClusterGroup
+            key="earthquake-cluster"
             showCoverageOnHover={false}
             spiderfyDistanceMultiplier={2}
           >

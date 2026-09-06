@@ -162,13 +162,14 @@ function Select({
       <select
         value={value?.id || ""}
         onChange={(e) => {
-          const selected = options.find((o) => o.id === e.target.value) || null;
+          const safeOptions = options || [];
+          const selected = safeOptions.find((o) => o.id === e.target.value) || null;
           onChange(selected);
         }}
         className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg outline-none focus:border-accent"
       >
         <option value="">-</option>
-        {options.map((o) => (
+        {(options || []).map((o) => (
           <option key={o.id} value={o.id}>
             {o.name_local}
           </option>

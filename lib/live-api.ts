@@ -59,21 +59,37 @@ export interface WilayahResponse {
   level: string;
   count: number;
   entities: RegionEntity[];
+  error?: string;
 }
 
 export async function fetchBMKG(): Promise<BmkgResponse> {
-  const res = await fetch("/api/bmkg");
-  return res.json();
+  try {
+    const res = await fetch("/api/bmkg");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e: any) {
+    return { latest: null, felt: [], updatedAt: new Date().toISOString(), error: e.message };
+  }
 }
 
 export async function fetchPVMBG(): Promise<PvmbgResponse> {
-  const res = await fetch("/api/pvmbg");
-  return res.json();
+  try {
+    const res = await fetch("/api/pvmbg");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e: any) {
+    return { volcanoes: [], updatedAt: new Date().toISOString(), error: e.message };
+  }
 }
 
 export async function fetchVolcanoes(): Promise<VolcanoesResponse> {
-  const res = await fetch("/api/volcanoes");
-  return res.json();
+  try {
+    const res = await fetch("/api/volcanoes");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e: any) {
+    return { volcanoes: [], updatedAt: new Date().toISOString(), error: e.message };
+  }
 }
 
 export async function fetchWilayah(
@@ -83,8 +99,18 @@ export async function fetchWilayah(
   const url = slug
     ? `/api/wilayah?level=${level}&slug=${encodeURIComponent(slug)}`
     : `/api/wilayah?level=${level}`;
-  const res = await fetch(url);
-  return res.json();
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return {
+      level: data.level || level,
+      count: data.count || 0,
+      entities: Array.isArray(data.entities) ? data.entities : [],
+    };
+  } catch (e: any) {
+    return { level, count: 0, entities: [], error: e.message };
+  }
 }
 
 export function findTargetVolcano(
