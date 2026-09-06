@@ -13,6 +13,7 @@ import {
   fetchVolcanoes,
   fetchBMKG,
   haversineKm,
+  levelFromEarthquake,
   Volcano,
   Earthquake,
   RegionEntity,
@@ -71,7 +72,7 @@ export const ALERT_LEVELS: Record<AlertLevel, AlertLevelConfig> = {
   },
 };
 
-export const DEFAULT_CENTER: [number, number] = [-7.5413, 110.4463];
+export const DEFAULT_CENTER: [number, number] = [-2.5489, 118.0149];
 
 interface UserLocation {
   lat: number;
@@ -301,9 +302,10 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         setNearestVolcano(v);
         setNearestEarthquake(e);
 
-        if (v) {
-          setAlertLevelState(v.item.level);
-        }
+        const maxVolcanoLevel = volcanoes.reduce((m, vol) => Math.max(m, vol.level), 1);
+        const eqLevel = e ? levelFromEarthquake(e.item.magnitude || 0) : 1;
+        const kelurahanLevel = v ? v.item.level : 1;
+        setAlertLevelState(Math.max(maxVolcanoLevel, eqLevel, kelurahanLevel) as AlertLevel);
       } catch {
         // ignore
       }

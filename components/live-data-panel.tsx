@@ -6,22 +6,18 @@ import {
   Flame,
   RefreshCw,
   Database,
-  AlertTriangle,
   MapPin,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import {
   fetchBMKG,
   fetchPVMBG,
-  findTargetVolcano,
   levelFromEarthquake,
   BmkgResponse,
   PvmbgResponse,
 } from "@/lib/live-api";
 import { pushAlert } from "@/lib/firestore";
 import { ALERT_LEVELS } from "@/lib/alert-context";
-
-const TARGET_VOLCANO = process.env.NEXT_PUBLIC_TARGET_VOLCANO || "Merapi";
 
 function formatTime(iso: string | null) {
   if (!iso) return "-";
@@ -58,10 +54,11 @@ export function LiveDataPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  const target = pvmbg
-    ? findTargetVolcano(pvmbg.volcanoes, TARGET_VOLCANO)
-    : null;
-  const targetConfig = target ? ALERT_LEVELS[target.level] : null;
+  const allVolcanoes = pvmbg?.volcanoes || [];
+  const sortedVolcanoes = [...allVolcanoes].sort(
+    (a, b) => b.level - a.level || a.name.localeCompare(b.name)
+  );
+  const highAlert = sortedVolcanoes.filter((v) => v.level >= 3);
 
   const logEarthquake = async () => {
     if (!bmkg?.latest) return;
@@ -83,16 +80,18 @@ export function LiveDataPanel() {
     setTimeout(() => setLogStatus(null), 3000);
   };
 
-  const logVolcano = async () => {
-    if (!target) return;
-    await pushAlert({
-      type: "volcano",
-      title: `${target.name} - ${target.status}`,
-      description: `Status PVMBG gunung ${target.name} saat ini ${target.status}.`,
-      level: target.level,
-      volcanoStatus: target.status,
-    });
-    setLogStatus("Status gunung tercatat di Firestore");
+  const logHighAlertVolcanoes = async () => {
+    if (highAlert.length === 0) return;
+    for (const v of highAlert) {
+      await pushAlert({
+        type: "volcano",
+        title: `${v.name} - ${v.status}`,
+        description: `Status PVMBG gunung ${v.name} saat ini ${v.status}.`,
+        level: v.level,
+        volcanoStatus: v.status,
+      });
+    }
+    setLogStatus(`${highAlert.length} status gunung tercatat di Firestore`);
     setTimeout(() => setLogStatus(null), 3000);
   };
 
@@ -181,52 +180,57 @@ export function LiveDataPanel() {
         </div>
 
         <div className="space-y-3">
-          <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase text-fg-muted">
-            <Flame className="h-3.5 w-3.5" /> Status Gunung ({TARGET_VOLCANO})
-          </h4>
-          {target ? (
-            <div
-              className="rounded-xl border p-4"
-              style={{
-                borderColor: targetConfig?.color,
-                backgroundColor: `${targetConfig?.color}10`,
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-lg font-bold text-fg">{target.name}</p>
-                <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                  style={{
-                    backgroundColor: `${targetConfig?.color}20`,
-                    color: targetConfig?.color,
-                  }}
-                >
-                  {target.status}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-fg-muted">
-                {targetConfig?.recommendation}
-              </p>
-              {targetConfig?.evacuationCue && (
-                <p className="mt-2 flex items-center gap-1 text-xs font-bold text-red-400">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {targetConfig.evacuationCue}
-                </p>
-              )}
-              <button
-                onClick={logVolcano}
-                type="button"
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent/10 py-1.5 text-xs font-medium text-accent hover:bg-accent/20"
-              >
-                <Database className="h-3.5 w-3.5" /> Log ke Firestore
-              </button>
+          <div className="flex items-center justify-between">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold uppercase text-fg-muted">
+              <Flame className="h-3.5 w-3.5" /> Gunung Api Aktif
+            </h4>
+            {highAlert.length > 0 && (
+              <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400">
+                {highAlert.length} Siaga/Awas
+              </span>
+            )}
+          </div>
+          {pvmbg?.error ? (
+            <p className="text-sm text-fg-muted">Gagal memuat PVMBG: {pvmbg.error}</p>
+          ) : sortedVolcanoes.length > 0 ? (
+            <div className="max-h-[260px] overflow-auto space-y-2 pr-1">
+              {sortedVolcanoes.map((v) => {
+                const color = ALERT_LEVELS[v.level].color;
+                return (
+                  <div
+                    key={v.name}
+                    className="rounded-xl border border-card-border bg-white/5 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-fg">{v.name}</p>
+                      <span
+                        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                        style={{
+                          backgroundColor: `${color}20`,
+                          color,
+                        }}
+                      >
+                        {v.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-fg-muted">
+                      {ALERT_LEVELS[v.level].recommendation}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-fg-muted">
-              {pvmbg?.error
-                ? `Gagal memuat PVMBG: ${pvmbg.error}`
-                : `Data ${TARGET_VOLCANO} tidak ditemukan.`}
-            </p>
+            <p className="text-sm text-fg-muted">Data gunung api belum tersedia.</p>
+          )}
+          {highAlert.length > 0 && (
+            <button
+              onClick={logHighAlertVolcanoes}
+              type="button"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent/10 py-1.5 text-xs font-medium text-accent hover:bg-accent/20"
+            >
+              <Database className="h-3.5 w-3.5" /> Log Semua Siaga/Awas
+            </button>
           )}
         </div>
       </div>
