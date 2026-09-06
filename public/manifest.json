@@ -1,7 +1,7 @@
 {
   "name": "WasspadaApp - Monitor Bencana Kelurahan",
   "short_name": "WasspadaApp",
-  "description": "Aplikasi monitoring bencana kelurahan berbasis data BMKG dan PVMBG dengan peta interaktif, visualisasi 3D, dan peringatan waspada.",
+  "description": "Aplikasi monitoring bencana kelurahan berbasis data BMKG dan PVMBG dengan visualisasi 3D, peta interaktif, dan peringatan waspada.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -11,9 +11,15 @@
   "dir": "ltr",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icon-192x192.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ],

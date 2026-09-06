@@ -24,6 +24,10 @@ export const metadata: Metadata = {
     "Aplikasi monitoring bencana kelurahan berbasis data BMKG dan PVMBG dengan visualisasi 3D, peta interaktif, dan peringatan waspada.",
   applicationName: "WasspadaApp",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192x192.jpeg",
+    apple: "/icon-192x192.jpeg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
