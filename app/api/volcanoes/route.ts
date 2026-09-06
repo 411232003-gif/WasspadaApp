@@ -8,7 +8,7 @@ const VOLCANO_CSV_URL =
   "https://raw.githubusercontent.com/catris25/Indonesian-Volcanoes-in-Folium/main/Indonesian_volcanoes.csv";
 
 const LEVEL_REGEX = /Level (IV|III|II|I) \((Awas|Siaga|Waspada|Normal)\)/g;
-const VOLCANO_REGEX = /([^\[\n]+?)\s*\[Lihat laporan\]/g;
+const VOLCANO_REGEX = /<td>\s*([^<]+?)\s*<a[\s\S]*?Lihat laporan<\/a>/g;
 
 const ROMAN_TO_INT: Record<string, number> = {
   IV: 4,
