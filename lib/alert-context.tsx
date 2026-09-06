@@ -9,6 +9,14 @@ import {
   useCallback,
   useRef,
 } from "react";
+import {
+  fetchVolcanoes,
+  fetchBMKG,
+  haversineKm,
+  Volcano,
+  Earthquake,
+  RegionEntity,
+} from "./live-api";
 
 export type AlertLevel = 1 | 2 | 3 | 4;
 
@@ -63,11 +71,16 @@ export const ALERT_LEVELS: Record<AlertLevel, AlertLevelConfig> = {
   },
 };
 
-export const DISASTER_CENTER: [number, number] = [-6.2088, 106.8956];
+export const DEFAULT_CENTER: [number, number] = [-7.5413, 110.4463];
 
 interface UserLocation {
   lat: number;
   lon: number;
+}
+
+interface Nearest<T> {
+  item: T;
+  distanceKm: number;
 }
 
 interface AlertContextValue {
@@ -83,26 +96,16 @@ interface AlertContextValue {
   userZone: string | null;
   isInDangerZone: boolean;
   isInKrb3: boolean;
+  selectedKelurahan: RegionEntity | null;
+  setSelectedKelurahan: (entity: RegionEntity | null) => void;
+  disasterCenter: [number, number];
+  nearestVolcano: Nearest<Volcano> | null;
+  nearestEarthquake: Nearest<Earthquake> | null;
+  kelurahanZone: string | null;
+  kelurahanInDanger: boolean;
 }
 
 const AlertContext = createContext<AlertContextValue | undefined>(undefined);
-
-function toRad(value: number) {
-  return (value * Math.PI) / 180;
-}
-
-function haversineKm(a: [number, number], b: [number, number]) {
-  const R = 6371;
-  const dLat = toRad(b[0] - a[0]);
-  const dLon = toRad(b[1] - a[1]);
-  const lat1 = toRad(a[0]);
-  const lat2 = toRad(b[0]);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  return R * c;
-}
 
 function getZone(distanceKm: number) {
   if (distanceKm <= 3) return "KRB III";
@@ -150,12 +153,65 @@ function playEmergencySiren() {
   }
 }
 
+function getNearestVolcano(
+  center: [number, number],
+  volcanoes: Volcano[]
+): Nearest<Volcano> | null {
+  let best: Nearest<Volcano> | null = null;
+  for (const v of volcanoes) {
+    if (v.lat == null || v.lon == null) continue;
+    const d = haversineKm(center, [v.lat, v.lon]);
+    if (!best || d < best.distanceKm) {
+      best = { item: v, distanceKm: d };
+    }
+  }
+  return best;
+}
+
+function getNearestEarthquake(
+  center: [number, number],
+  earthquakes: Earthquake[]
+): Nearest<Earthquake> | null {
+  let best: Nearest<Earthquake> | null = null;
+  for (const e of earthquakes) {
+    if (!e.coordinates) continue;
+    const d = haversineKm(center, e.coordinates);
+    if (!best || d < best.distanceKm) {
+      best = { item: e, distanceKm: d };
+    }
+  }
+  return best;
+}
+
+const STORAGE_KEY = "wasspada-kelurahan";
+
 export function AlertProvider({ children }: { children: ReactNode }) {
   const [alertLevel, setAlertLevelState] = useState<AlertLevel>(1);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [selectedKelurahan, setSelectedKelurahanState] =
+    useState<RegionEntity | null>(null);
+  const [nearestVolcano, setNearestVolcano] =
+    useState<Nearest<Volcano> | null>(null);
+  const [nearestEarthquake, setNearestEarthquake] =
+    useState<Nearest<Earthquake> | null>(null);
   const didMount = useRef(false);
+
+  const disasterCenter: [number, number] = selectedKelurahan
+    ? [selectedKelurahan.lat, selectedKelurahan.lon]
+    : DEFAULT_CENTER;
+
+  const setSelectedKelurahan = useCallback((entity: RegionEntity | null) => {
+    setSelectedKelurahanState(entity);
+    if (typeof window !== "undefined") {
+      if (entity) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(entity));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+  }, []);
 
   const setAlertLevel = useCallback((level: AlertLevel) => {
     setAlertLevelState(level);
@@ -184,12 +240,31 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const userDistanceKm = userLocation
-    ? haversineKm([userLocation.lat, userLocation.lon], DISASTER_CENTER)
+    ? haversineKm([userLocation.lat, userLocation.lon], disasterCenter)
     : null;
 
   const userZone = userDistanceKm !== null ? getZone(userDistanceKm) : null;
   const isInKrb3 = userDistanceKm !== null && userDistanceKm <= 3;
-  const isInDangerZone = alertLevel === 4 || isInKrb3;
+  const kelurahanZone = nearestVolcano
+    ? getZone(nearestVolcano.distanceKm)
+    : null;
+  const kelurahanInDanger = kelurahanZone === "KRB III";
+  const isInDangerZone = alertLevel === 4 || isInKrb3 || kelurahanInDanger;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.lat != null && parsed?.lon != null) {
+          setSelectedKelurahanState(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     if (!didMount.current) {
@@ -199,7 +274,48 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     if (audioEnabled && isInDangerZone) {
       playEmergencySiren();
     }
-  }, [alertLevel, isInKrb3, audioEnabled, isInDangerZone]);
+  }, [alertLevel, isInKrb3, audioEnabled, isInDangerZone, kelurahanInDanger]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function sync() {
+      try {
+        const [volcanoRes, bmkgRes] = await Promise.all([
+          fetchVolcanoes(),
+          fetchBMKG(),
+        ]);
+        if (cancelled) return;
+
+        const volcanoes = volcanoRes.error ? [] : volcanoRes.volcanoes;
+        const earthquakes = bmkgRes.error
+          ? bmkgRes.felt
+          : [bmkgRes.latest, ...bmkgRes.felt].filter(
+              (e): e is Earthquake => e != null && e.coordinates != null
+            );
+
+        const center = disasterCenter;
+        const v = getNearestVolcano(center, volcanoes);
+        const e = getNearestEarthquake(center, earthquakes);
+
+        setNearestVolcano(v);
+        setNearestEarthquake(e);
+
+        if (v) {
+          setAlertLevelState(v.item.level);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    sync();
+    const interval = setInterval(sync, 120000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [disasterCenter, selectedKelurahan?.slug]);
 
   return (
     <AlertContext.Provider
@@ -216,6 +332,13 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         userZone,
         isInDangerZone,
         isInKrb3,
+        selectedKelurahan,
+        setSelectedKelurahan,
+        disasterCenter,
+        nearestVolcano,
+        nearestEarthquake,
+        kelurahanZone,
+        kelurahanInDanger,
       }}
     >
       {children}

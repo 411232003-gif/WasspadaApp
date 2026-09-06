@@ -1,18 +1,26 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useMemo, useState } from "react";
+import "react-leaflet-cluster/dist/assets/MarkerCluster.css";
+import "react-leaflet-cluster/dist/assets/MarkerCluster.Default.css";
+import { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
+  Popup,
   Polygon,
   Circle,
   Polyline,
+  useMap,
 } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import { useTheme } from "@/lib/theme-provider";
-import { Wind, Layers, Navigation, Info } from "lucide-react";
+import { useAlert } from "@/lib/alert-context";
+import { ALERT_LEVELS } from "@/lib/alert-context";
+import { fetchVolcanoes, fetchBMKG, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
+import { Wind, Layers, Navigation, Info, MapPin } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
 
@@ -23,28 +31,23 @@ const DIRECTION_DEGREES: Record<Direction, number> = {
   W: 270,
 };
 
-const KELURAHAN_CENTER: [number, number] = [-6.2088, 106.8456];
-const VOLCANO_COORDS: [number, number] = [-6.2088, 106.8956];
-const EPICENTER_COORDS: [number, number] = [-6.2188, 106.8356];
-const SAFE_ZONE_COORDS: [number, number] = [-6.1988, 106.8756];
-
 const DIRECTIONS: Direction[] = ["N", "S", "E", "W"];
 
-function getVolcanoIcon() {
+function getDotIcon(color: string) {
   return L.divIcon({
     className: "bg-transparent",
-    html: `<div class="map-marker volcano"><div class="map-marker-ring"></div><div class="map-marker-core"></div></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};box-shadow:0 0 10px ${color};border:2px solid rgba(255,255,255,0.4);"></div>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
   });
 }
 
-function getEarthquakeIcon() {
+function getKelurahanIcon() {
   return L.divIcon({
     className: "bg-transparent",
-    html: `<div class="map-marker earthquake"><div class="map-marker-ring"></div><div class="map-marker-core"></div></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:#facc15;box-shadow:0 0 14px #facc15;border:3px solid #fff;"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
   });
 }
 
@@ -72,8 +75,17 @@ function computeAshPolygon(
   return points;
 }
 
+function MapCenter({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom);
+  }, [map, center, zoom]);
+  return null;
+}
+
 export default function MapClient() {
   const { theme } = useTheme();
+  const { disasterCenter, selectedKelurahan, nearestVolcano, nearestEarthquake } = useAlert();
   const [direction, setDirection] = useState<Direction>("N");
   const [windSpeed, setWindSpeed] = useState(40);
   const [ashIntensity, setAshIntensity] = useState(40);
@@ -81,19 +93,54 @@ export default function MapClient() {
     ash: true,
     earthquake: true,
     evacuation: true,
+    volcanoes: true,
+    kelurahan: true,
   });
+
+  const [volcanoes, setVolcanoes] = useState<Volcano[]>([]);
+  const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
+        setVolcanoes(vRes.error ? [] : vRes.volcanoes);
+        const eqs = bRes.error
+          ? []
+          : [bRes.latest, ...bRes.felt].filter(
+              (e): e is Earthquake => e != null && e.coordinates != null
+            );
+        setEarthquakes(eqs);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const mapCenter = disasterCenter;
+  const zoom = selectedKelurahan ? 13 : 5;
+
+  const volcanoCoords: [number, number] =
+    nearestVolcano && nearestVolcano.item.lat != null && nearestVolcano.item.lon != null
+      ? [nearestVolcano.item.lat, nearestVolcano.item.lon]
+      : mapCenter;
+
+  const epicenterCoords: [number, number] =
+    nearestEarthquake && nearestEarthquake.item.coordinates
+      ? nearestEarthquake.item.coordinates
+      : [mapCenter[0] + 0.01, mapCenter[1] + 0.01];
+
+  const safeZoneCoords: [number, number] = [mapCenter[0] + 0.05, mapCenter[1] + 0.05];
 
   const accent = theme === "maroon" ? "#d4af37" : "#06b6d4";
   const accentSecondary = theme === "maroon" ? "#f59e0b" : "#3b82f6";
 
   const ashPolygon = useMemo(() => {
     const radius = 0.01 + (windSpeed / 100) * 0.07;
-    return computeAshPolygon(
-      VOLCANO_COORDS,
-      DIRECTION_DEGREES[direction],
-      radius
-    );
-  }, [direction, windSpeed]);
+    return computeAshPolygon(volcanoCoords, DIRECTION_DEGREES[direction], radius);
+  }, [direction, windSpeed, volcanoCoords]);
 
   const ashPathOptions = {
     color: accent,
@@ -117,34 +164,112 @@ export default function MapClient() {
     opacity: 0.9,
   };
 
+  const volcanoMarkers = useMemo(() => {
+    return volcanoes
+      .filter((v) => v.lat != null && v.lon != null)
+      .map((v) => {
+        const color = ALERT_LEVELS[v.level].color;
+        return (
+          <Marker
+            key={`v-${v.name}`}
+            position={[v.lat!, v.lon!] as [number, number]}
+            icon={getDotIcon(color)}
+          >
+            <Popup>
+              <div className="text-bg">
+                <strong>{v.name}</strong>
+                <br />
+                <span style={{ color }}>{v.status}</span>
+                <br />
+                {v.region}
+              </div>
+            </Popup>
+          </Marker>
+        );
+      });
+  }, [volcanoes]);
+
+  const earthquakeMarkers = useMemo(() => {
+    return earthquakes.map((e) => {
+      const level = levelFromEarthquake(e.magnitude || 0);
+      const color = ALERT_LEVELS[level].color;
+      return (
+        <Marker
+          key={`e-${e.timestamp || e.location}`}
+          position={e.coordinates as [number, number]}
+          icon={getDotIcon(color)}
+        >
+          <Popup>
+            <div className="text-bg">
+              <strong>Gempa M {e.magnitude}</strong>
+              <br />
+              {e.location}
+              <br />
+              {e.depthKm} km
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [earthquakes]);
+
   return (
     <div className="relative h-[60vh] md:h-[calc(100vh-7rem)] min-h-[420px] w-full rounded-2xl overflow-hidden glass-panel">
       <MapContainer
-        center={KELURAHAN_CENTER}
-        zoom={13}
+        center={mapCenter}
+        zoom={zoom}
         scrollWheelZoom
         className="h-full w-full"
       >
+        <MapCenter center={mapCenter} zoom={zoom} />
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        <Marker position={VOLCANO_COORDS} icon={getVolcanoIcon()} />
-        <Marker position={EPICENTER_COORDS} icon={getEarthquakeIcon()} />
+
+        {layers.kelurahan && (
+          <Marker position={mapCenter} icon={getKelurahanIcon()}>
+            <Popup>
+              <div className="text-bg">
+                <strong>{selectedKelurahan?.name_local || "Kelurahan"}</strong>
+                <br />
+                {mapCenter[0].toFixed(4)}, {mapCenter[1].toFixed(4)}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {layers.volcanoes && (
+          <MarkerClusterGroup
+            showCoverageOnHover={false}
+            spiderfyDistanceMultiplier={2}
+          >
+            {volcanoMarkers}
+          </MarkerClusterGroup>
+        )}
+
+        {layers.earthquake && (
+          <MarkerClusterGroup
+            showCoverageOnHover={false}
+            spiderfyDistanceMultiplier={2}
+          >
+            {earthquakeMarkers}
+          </MarkerClusterGroup>
+        )}
 
         {layers.ash && (
           <Polygon positions={ashPolygon} pathOptions={ashPathOptions} />
         )}
         {layers.earthquake && (
           <Circle
-            center={EPICENTER_COORDS}
+            center={epicenterCoords}
             radius={5000}
             pathOptions={earthquakePathOptions}
           />
         )}
         {layers.evacuation && (
           <Polyline
-            positions={[KELURAHAN_CENTER, SAFE_ZONE_COORDS]}
+            positions={[mapCenter, safeZoneCoords]}
             pathOptions={evacuationPathOptions}
           />
         )}
@@ -214,9 +339,11 @@ export default function MapClient() {
           </label>
           <div className="space-y-2">
             {[
+              { key: "volcanoes", label: "Gunung Api Aktif" },
+              { key: "earthquake", label: "Gempabumi BMKG" },
+              { key: "kelurahan", label: "Lokasi Kelurahan" },
               { key: "ash", label: "Sebaran Abu Vulkanik" },
-              { key: "earthquake", label: "Area Gempa Terasa" },
-              { key: "evacuation", label: "Jalur Evakuasi Kelurahan" },
+              { key: "evacuation", label: "Jalur Evakuasi" },
             ].map((item) => (
               <label
                 key={item.key}
@@ -242,8 +369,9 @@ export default function MapClient() {
         <div className="mt-4 flex items-start gap-2 rounded-xl bg-black/20 p-2.5">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
           <p className="text-[11px] leading-relaxed text-fg-muted">
-            Koordinat bersifat simulasi. Ganti dengan data BMKG dan batas
-            kelurahan asli di <code className="text-accent">components/map/map-client.tsx</code>.
+            {loading
+              ? "Memuat data gunung api dan gempa..."
+              : `Memantau ${volcanoes.length} gunung api aktif dan ${earthquakes.length} gempa.`}
           </p>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { ShieldAlert } from "lucide-react";
 import { KelurahanSelector } from "@/components/kelurahan-selector";
+import { GlobalSearch } from "@/components/global-search";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export function Header() {
@@ -21,6 +22,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-3">
+          <GlobalSearch />
           <KelurahanSelector />
           <ThemeSwitcher />
         </div>
