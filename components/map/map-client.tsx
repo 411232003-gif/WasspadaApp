@@ -23,7 +23,7 @@ import { fetchVolcanoes, fetchBMKG, Volcano, Earthquake, levelFromEarthquake } f
 import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal, Satellite } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
-type TileProvider = "osm" | "carto-dark" | "carto-light" | "custom";
+type TileProvider = "osm" | "carto-voyager" | "carto-dark" | "carto-light" | "custom";
 
 const DIRECTION_DEGREES: Record<Direction, number> = {
   N: 0,
@@ -104,7 +104,8 @@ export default function MapClient() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [tileProvider, setTileProvider] = useState<TileProvider>(() => {
     const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
-    return ["osm", "carto-dark", "carto-light", "custom"].includes(env) ? env : "osm";
+    const allowed: TileProvider[] = ["osm", "carto-voyager", "carto-dark", "carto-light", "custom"];
+    return allowed.includes(env) ? env : "carto-voyager";
   });
   const [cartoApiKey, setCartoApiKey] = useState<string>("");
 
@@ -156,32 +157,41 @@ export default function MapClient() {
 
   const tileConfig = useMemo(() => {
     const key = cartoApiKey || process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const cartoAttr =
+      '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+    const osmAttr =
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
     switch (tileProvider) {
+      case "carto-voyager":
+        return {
+          url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+          attribution: cartoAttr,
+          subdomains: "abcd",
+        };
       case "carto-dark":
         return key
           ? {
-              url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${key}`,
-              attribution:
-                '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=${key}`,
+              attribution: cartoAttr,
+              subdomains: "abcd",
             }
           : {
               url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-              missingKey: true,
+              attribution: osmAttr,
+              subdomains: "abc",
             };
       case "carto-light":
         return key
           ? {
-              url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${key}`,
-              attribution:
-                '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=${key}`,
+              attribution: cartoAttr,
+              subdomains: "abcd",
             }
           : {
               url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-              missingKey: true,
+              attribution: osmAttr,
+              subdomains: "abc",
             };
       case "custom":
         return {
@@ -191,12 +201,14 @@ export default function MapClient() {
           attribution:
             process.env.NEXT_PUBLIC_CUSTOM_TILE_ATTRIBUTION ||
             '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          subdomains: "abc",
         };
+      case "osm":
       default:
         return {
           url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          attribution: osmAttr,
+          subdomains: "abc",
         };
     }
   }, [tileProvider]);
@@ -290,9 +302,10 @@ export default function MapClient() {
       >
         <MapCenter center={mapCenter} zoom={zoom} />
         <TileLayer
-          key={`${tileProvider}-${cartoApiKey}`}
+          key={tileProvider}
           attribution={tileConfig.attribution}
           url={tileConfig.url}
+          subdomains={tileConfig.subdomains}
         />
 
         {layers.kelurahan && (
@@ -383,11 +396,12 @@ export default function MapClient() {
               className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg outline-none focus:border-accent"
             >
               <option value="osm">OpenStreetMap (Gratis)</option>
-              <option value="carto-dark">CARTO Dark</option>
-              <option value="carto-light">CARTO Light</option>
+              <option value="carto-voyager">CARTO Voyager (Gratis + Label)</option>
+              <option value="carto-dark">CARTO Dark (butuh API key)</option>
+              <option value="carto-light">CARTO Light (butuh API key)</option>
               <option value="custom">Custom / Layanan Lain</option>
             </select>
-            {tileProvider.startsWith("carto") && (
+            {(tileProvider === "carto-dark" || tileProvider === "carto-light") && (
               <div className="space-y-1">
                 <input
                   type="text"
@@ -403,7 +417,7 @@ export default function MapClient() {
                   placeholder="Masukkan CARTO API key"
                   className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg placeholder:text-fg-muted outline-none focus:border-accent"
                 />
-                {tileConfig.missingKey && (
+                {!cartoApiKey && !process.env.NEXT_PUBLIC_CARTO_API_KEY && (
                   <p className="text-xs text-red-400">
                     CARTO API key belum tersedia. Fallback ke OSM.
                   </p>

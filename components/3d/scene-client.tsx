@@ -271,28 +271,35 @@ function AshCloud({
   if (!visible) return null;
   const toRad = (v: number) => (v * Math.PI) / 180;
   const windTo = ((windFrom ?? 0) + 180) % 360;
-  const plumeLength = Math.min(8, 2 + (windSpeed ?? 0) * 0.25) * SCENE_SCALE;
+  const plumeLength = Math.min(12, 3 + (windSpeed ?? 0) * 0.35) * SCENE_SCALE;
+  const plumeWidth = Math.min(3.5, 1 + (windSpeed ?? 0) * 0.12) * SCENE_SCALE;
   return (
     <group>
-      <mesh position={[position[0], position[1] + 4, position[2]]}>
-        <sphereGeometry args={[2.8, 32, 32]} />
+      <mesh position={[position[0], position[1] + 4.2, position[2]]}>
+        <sphereGeometry args={[3.2, 32, 32]} />
         <meshStandardMaterial
           color="#6b7280"
           transparent
-          opacity={0.22}
+          opacity={0.35}
           depthWrite={false}
         />
       </mesh>
       <group
-        position={[position[0], position[1] + 4.2, position[2]]}
+        position={[position[0], position[1] + 4.4, position[2]]}
         rotation={[0, -toRad(windTo), 0]}
       >
-        <mesh position={[0, 0, -plumeLength / 2]}>
-          <boxGeometry args={[1.6 * SCENE_SCALE, 0.6 * SCENE_SCALE, plumeLength]} />
-          <meshStandardMaterial color="#57534e" transparent opacity={0.18} depthWrite={false} />
+        <mesh position={[0, plumeLength / 2, 0]}>
+          <cylinderGeometry args={[plumeWidth, 0.1, plumeLength, 32, 1, true]} />
+          <meshStandardMaterial
+            color="#4b4845"
+            transparent
+            opacity={0.32}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
         </mesh>
       </group>
-      <SmokeParticles count={260} spread={1.8} visible position={position} windFrom={windFrom} windSpeed={windSpeed} />
+      <SmokeParticles count={360} spread={2.4} visible position={position} windFrom={windFrom} windSpeed={windSpeed} />
     </group>
   );
 }
