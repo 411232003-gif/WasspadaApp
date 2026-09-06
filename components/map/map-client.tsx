@@ -136,8 +136,11 @@ export default function MapClient() {
     }
   }, []);
 
-  const mapCenter = disasterCenter;
-  const zoom = selectedKelurahan ? 13 : 5;
+  const mapCenter = useMemo<[number, number]>(
+    () => [disasterCenter[0], disasterCenter[1]],
+    [disasterCenter[0], disasterCenter[1]]
+  );
+  const zoom = useMemo(() => (selectedKelurahan ? 13 : 5), [selectedKelurahan]);
 
   const volcanoCoords: [number, number] =
     nearestVolcano && nearestVolcano.item.lat != null && nearestVolcano.item.lon != null
