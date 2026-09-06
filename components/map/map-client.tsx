@@ -23,7 +23,7 @@ import { fetchVolcanoes, fetchBMKG, Volcano, Earthquake, levelFromEarthquake } f
 import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal, Satellite } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
-type TileProvider = "osm" | "carto-voyager" | "carto-dark" | "carto-light" | "custom";
+type TileProvider = "osm" | "carto-voyager" | "esri-street" | "carto-dark" | "carto-light" | "custom";
 
 const DIRECTION_DEGREES: Record<Direction, number> = {
   N: 0,
@@ -104,7 +104,7 @@ export default function MapClient() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [tileProvider, setTileProvider] = useState<TileProvider>(() => {
     const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
-    const allowed: TileProvider[] = ["osm", "carto-voyager", "carto-dark", "carto-light", "custom"];
+    const allowed: TileProvider[] = ["osm", "carto-voyager", "esri-street", "carto-dark", "carto-light", "custom"];
     return allowed.includes(env) ? env : "carto-voyager";
   });
   const [cartoApiKey, setCartoApiKey] = useState<string>("");
@@ -168,6 +168,13 @@ export default function MapClient() {
           url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
           attribution: cartoAttr,
           subdomains: "abcd",
+        };
+      case "esri-street":
+        return {
+          url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+          attribution:
+            '&copy; <a href="https://www.esri.com/">Esri</a> | &copy; OpenStreetMap, Garmin, FAO, NOAA, USGS',
+          subdomains: "",
         };
       case "carto-dark":
         return key
@@ -397,6 +404,7 @@ export default function MapClient() {
             >
               <option value="osm">OpenStreetMap (Gratis)</option>
               <option value="carto-voyager">CARTO Voyager (Gratis + Label)</option>
+              <option value="esri-street">Esri WorldStreetMap (Label Jelas)</option>
               <option value="carto-dark">CARTO Dark (butuh API key)</option>
               <option value="carto-light">CARTO Light (butuh API key)</option>
               <option value="custom">Custom / Layanan Lain</option>
