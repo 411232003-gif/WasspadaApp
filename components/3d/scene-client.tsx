@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Grid } from "@react-three/drei";
+import { OrbitControls, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal, Info, AlertTriangle, MousePointer2, Wind, Navigation } from "lucide-react";
 import { useAlert, ALERT_LEVELS } from "@/lib/alert-context";
@@ -77,15 +77,19 @@ function Terrain({ visible }: { visible: boolean }) {
 function VolcanoCone({
   visible,
   position,
+  name,
+  status,
 }: {
   visible: boolean;
   position: [number, number, number];
+  name?: string;
+  status?: string;
 }) {
   if (!visible) return null;
   return (
     <group position={position}>
       <mesh position={[0, 1.5, 0]} castShadow>
-        <coneGeometry args={[1.5, 3, 32]} />
+        <coneGeometry args={[1.7, 3.2, 32]} />
         <meshStandardMaterial
           color="#7f1d1d"
           emissive="#f97316"
@@ -93,11 +97,27 @@ function VolcanoCone({
           roughness={0.8}
         />
       </mesh>
+      <mesh position={[0, 1.6, 0]}>
+        <cylinderGeometry args={[1.72, 1.72, 0.25, 32]} />
+        <meshStandardMaterial color="#3f0f0f" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 3.15, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.65, 0.12, 16, 32]} />
+        <meshStandardMaterial color="#1a0505" roughness={1} />
+      </mesh>
       <pointLight position={[0, 3.2, 0]} color="#f97316" intensity={4} distance={10} />
-      <mesh position={[0, 3, 0]}>
-        <sphereGeometry args={[0.2, 16, 16]} />
+      <mesh position={[0, 3.05, 0]}>
+        <sphereGeometry args={[0.25, 16, 16]} />
         <meshBasicMaterial color="#fbbf24" />
       </mesh>
+      {name && (
+        <Html position={[0, 5.2, 0]} center distanceFactor={15}>
+          <div className="whitespace-nowrap rounded-md bg-black/60 px-2 py-1 text-center text-[10px] font-semibold text-white backdrop-blur-sm">
+            {name}
+            {status ? <span className="block text-[9px] font-normal text-fg-muted">{status}</span> : null}
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -216,6 +236,38 @@ function HazardRings({
           />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+function WindArrow({
+  windFrom,
+  windSpeed,
+}: {
+  windFrom?: number;
+  windSpeed?: number;
+}) {
+  if (windFrom == null) return null;
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const windTo = ((windFrom + 180) % 360);
+  const color = windSpeed && windSpeed > 20 ? "#22d3ee" : "#94a3b8";
+  return (
+    <group position={[0, 0.2, 0]} rotation={[0, -toRad(windTo), 0]}>
+      <mesh position={[0, 1.5, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 3, 16]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
+      </mesh>
+      <mesh position={[0, 3.2, 0]}>
+        <coneGeometry args={[0.3, 0.8, 16]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.4} />
+      </mesh>
+      <Html position={[0, 4.2, 0]} center distanceFactor={15}>
+        <div className="whitespace-nowrap rounded-md bg-black/60 px-2 py-1 text-center text-[9px] text-white backdrop-blur-sm">
+          Angin {cardinalFrom(windFrom)} {windSpeed ? `${windSpeed} km/h` : ""}
+          <br />
+          <span className="text-[8px] text-fg-muted">Abu ke {cardinalTo(windFrom)}</span>
+        </div>
+      </Html>
     </group>
   );
 }
@@ -380,9 +432,11 @@ export default function SceneClient() {
 
         <Terrain visible={layers.terrain} />
 
+        {wind && <WindArrow windFrom={wind.windDirectionFrom} windSpeed={wind.windSpeed} />}
+
         {isVolcano && (
           <>
-            <VolcanoCone visible={layers.volcano} position={volcanoRel.position} />
+            <VolcanoCone visible={layers.volcano} position={volcanoRel.position} name={nearestVolcano?.item.name} status={nearestVolcano?.item.status} />
             <SmokeParticles visible={layers.particles} position={volcanoRel.position} windFrom={wind?.windDirectionFrom} windSpeed={wind?.windSpeed} />
             <HazardRings visible={layers.rings} position={volcanoRel.position} />
           </>
@@ -398,7 +452,7 @@ export default function SceneClient() {
 
         {isAsh && (
           <>
-            <VolcanoCone visible={layers.volcano} position={volcanoRel.position} />
+            <VolcanoCone visible={layers.volcano} position={volcanoRel.position} name={nearestVolcano?.item.name} status={nearestVolcano?.item.status} />
             <AshCloud visible position={volcanoRel.position} windFrom={wind?.windDirectionFrom} windSpeed={wind?.windSpeed} />
           </>
         )}
