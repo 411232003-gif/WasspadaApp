@@ -354,7 +354,7 @@ export default function MapClient() {
       )}
 
       {panelOpen && (
-        <div className="absolute top-3 right-3 z-[500] w-72 max-h-[80vh] overflow-auto rounded-2xl glass-panel p-4 theme-transition">
+        <div className="absolute top-3 right-3 z-[500] w-64 max-w-[calc(100%-1.5rem)] max-h-[80vh] overflow-auto rounded-2xl glass-panel p-4 theme-transition sm:w-72">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Wind className="h-5 w-5 text-accent" />
@@ -427,7 +427,7 @@ export default function MapClient() {
                 key={dir}
                 onClick={() => setDirection(dir)}
                 type="button"
-                className={`rounded-lg py-1.5 text-xs font-semibold transition-all ${
+                className={`min-w-0 rounded-lg px-1 py-1 text-[10px] font-semibold transition-all sm:py-1.5 sm:text-xs ${
                   direction === dir
                     ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
                     : "text-fg hover:bg-white/5"

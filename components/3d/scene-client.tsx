@@ -303,7 +303,7 @@ export default function SceneClient() {
       </Canvas>
 
       {panelOpen ? (
-        <div className="absolute top-3 right-3 z-10 w-72 rounded-2xl glass-panel p-4 theme-transition">
+        <div className="absolute top-3 right-3 z-10 w-64 max-w-[calc(100%-1.5rem)] rounded-2xl glass-panel p-4 theme-transition sm:w-72">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-fg">3D Controls</h3>
             <div className="flex items-center gap-1">
@@ -330,7 +330,7 @@ export default function SceneClient() {
           <button
             onClick={() => setView("volcano")}
             type="button"
-            className={`flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all ${
+            className={`flex flex-col items-center gap-1 min-w-0 rounded-lg px-1 py-1.5 text-[10px] font-medium transition-all sm:py-2 sm:text-xs ${
               isVolcano
                 ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
                 : "text-fg hover:bg-white/5"
@@ -341,7 +341,7 @@ export default function SceneClient() {
           <button
             onClick={() => setView("earthquake")}
             type="button"
-            className={`flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all ${
+            className={`flex flex-col items-center gap-1 min-w-0 rounded-lg px-1 py-1.5 text-[10px] font-medium transition-all sm:py-2 sm:text-xs ${
               isEarthquake
                 ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
                 : "text-fg hover:bg-white/5"
@@ -352,7 +352,7 @@ export default function SceneClient() {
           <button
             onClick={() => setView("ash")}
             type="button"
-            className={`flex flex-col items-center gap-1 rounded-lg py-2 text-xs font-medium transition-all ${
+            className={`flex flex-col items-center gap-1 min-w-0 rounded-lg px-1 py-1.5 text-[10px] font-medium transition-all sm:py-2 sm:text-xs ${
               isAsh
                 ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
                 : "text-fg hover:bg-white/5"
