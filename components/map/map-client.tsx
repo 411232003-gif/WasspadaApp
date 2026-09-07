@@ -20,10 +20,10 @@ import { useTheme } from "@/lib/theme-provider";
 import { useAlert } from "@/lib/alert-context";
 import { ALERT_LEVELS } from "@/lib/alert-context";
 import { fetchVolcanoes, fetchBMKG, getBearing, computeDestination, haversineKm, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
-import { Wind, Layers, Navigation, Info, MapPin, X, SlidersHorizontal, Satellite } from "lucide-react";
+import { Wind, Layers, Navigation, Info, X, SlidersHorizontal, Satellite } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
-type TileProvider = "osm" | "carto-voyager" | "esri-street" | "carto-dark" | "carto-light" | "custom";
+type TileProvider = "osm" | "esri-street";
 
 const DIRECTION_DEGREES: Record<Direction, number> = {
   N: 0,
@@ -104,10 +104,9 @@ export default function MapClient() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [tileProvider, setTileProvider] = useState<TileProvider>(() => {
     const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
-    const allowed: TileProvider[] = ["osm", "carto-voyager", "esri-street", "carto-dark", "carto-light", "custom"];
-    return allowed.includes(env) ? env : "carto-voyager";
+    const allowed: TileProvider[] = ["osm", "esri-street"];
+    return allowed.includes(env) ? env : "esri-street";
   });
-  const [cartoApiKey, setCartoApiKey] = useState<string>("");
 
   useEffect(() => {
     async function load() {
@@ -127,15 +126,6 @@ export default function MapClient() {
     load();
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const saved = localStorage.getItem("wasspada-carto-key");
-      if (saved) setCartoApiKey(saved);
-    } catch {
-      // ignore
-    }
-  }, []);
 
   const mapCenter = useMemo<[number, number]>(
     () => [disasterCenter[0], disasterCenter[1]],
@@ -167,59 +157,16 @@ export default function MapClient() {
   }, [mapCenter, nearestVolcano]);
 
   const tileConfig = useMemo(() => {
-    const key = cartoApiKey || process.env.NEXT_PUBLIC_CARTO_API_KEY;
-    const cartoAttr =
-      '&copy; <a href="https://carto.com/">CARTO</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
     const osmAttr =
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
     switch (tileProvider) {
-      case "carto-voyager":
-        return {
-          url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-          attribution: cartoAttr,
-          subdomains: "abcd",
-        };
       case "esri-street":
         return {
           url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
           attribution:
             '&copy; <a href="https://www.esri.com/">Esri</a> | &copy; OpenStreetMap, Garmin, FAO, NOAA, USGS',
           subdomains: "",
-        };
-      case "carto-dark":
-        return key
-          ? {
-              url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=${key}`,
-              attribution: cartoAttr,
-              subdomains: "abcd",
-            }
-          : {
-              url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              attribution: osmAttr,
-              subdomains: "abc",
-            };
-      case "carto-light":
-        return key
-          ? {
-              url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key=${key}`,
-              attribution: cartoAttr,
-              subdomains: "abcd",
-            }
-          : {
-              url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-              attribution: osmAttr,
-              subdomains: "abc",
-            };
-      case "custom":
-        return {
-          url:
-            process.env.NEXT_PUBLIC_CUSTOM_TILE_URL ||
-            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-          attribution:
-            process.env.NEXT_PUBLIC_CUSTOM_TILE_ATTRIBUTION ||
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          subdomains: "abc",
         };
       case "osm":
       default:
@@ -437,44 +384,9 @@ export default function MapClient() {
               onChange={(e) => setTileProvider(e.target.value as TileProvider)}
               className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg outline-none focus:border-accent"
             >
-              <option value="osm">OpenStreetMap (Gratis)</option>
-              <option value="carto-voyager">CARTO Voyager (Gratis + Label)</option>
-              <option value="esri-street">Esri WorldStreetMap (Label Jelas)</option>
-              <option value="carto-dark">CARTO Dark (butuh API key)</option>
-              <option value="carto-light">CARTO Light (butuh API key)</option>
-              <option value="custom">Custom / Layanan Lain</option>
+              <option value="osm">StreetMap</option>
+              <option value="esri-street">EstriMap</option>
             </select>
-            {(tileProvider === "carto-dark" || tileProvider === "carto-light") && (
-              <div className="space-y-1">
-                <input
-                  type="text"
-                  value={cartoApiKey}
-                  onChange={(e) => {
-                    const val = e.target.value.trim();
-                    setCartoApiKey(val);
-                    if (typeof window !== "undefined") {
-                      if (val) localStorage.setItem("wasspada-carto-key", val);
-                      else localStorage.removeItem("wasspada-carto-key");
-                    }
-                  }}
-                  placeholder="Masukkan CARTO API key"
-                  className="w-full rounded-lg border border-card-border bg-card/50 px-3 py-2 text-sm text-fg placeholder:text-fg-muted outline-none focus:border-accent"
-                />
-                {!cartoApiKey && !process.env.NEXT_PUBLIC_CARTO_API_KEY && (
-                  <p className="text-xs text-red-400">
-                    CARTO API key belum tersedia. Fallback ke OSM.
-                  </p>
-                )}
-                <p className="text-[10px] text-fg-muted">
-                  Key disimpan lokal di browser. Untuk production, gunakan NEXT_PUBLIC_CARTO_API_KEY di Vercel.
-                </p>
-              </div>
-            )}
-            {tileProvider === "custom" && (
-              <p className="text-[10px] text-fg-muted">
-                Gunakan NEXT_PUBLIC_CUSTOM_TILE_URL dan NEXT_PUBLIC_CUSTOM_TILE_ATTRIBUTION.
-              </p>
-            )}
           </div>
 
         <div className="mb-4">
