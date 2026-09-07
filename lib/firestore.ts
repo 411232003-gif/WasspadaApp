@@ -189,9 +189,9 @@ export function subscribeBookmarks(callback: BookmarkCallback): () => void {
         limit(20)
       );
       return onSnapshot(q, (snapshot) => {
-        const bookmarks = snapshot.docs.map((docSnap) => ({
+        const bookmarks: BookmarkDoc[] = snapshot.docs.map((docSnap) => ({
+          ...(docSnap.data() as BookmarkDoc),
           id: docSnap.id,
-          ...(docSnap.data() as BookmarkInput),
           createdAt: docSnap.data().createdAt as Timestamp | number,
         }));
         callback(bookmarks);
@@ -254,9 +254,9 @@ export function subscribeSubscriptions(
         limit(20)
       );
       return onSnapshot(q, (snapshot) => {
-        const subscriptions = snapshot.docs.map((docSnap) => ({
+        const subscriptions: SubscriptionDoc[] = snapshot.docs.map((docSnap) => ({
+          ...(docSnap.data() as SubscriptionDoc),
           id: docSnap.id,
-          ...(docSnap.data() as SubscriptionInput),
           createdAt: docSnap.data().createdAt as Timestamp | number,
         }));
         callback(subscriptions);
