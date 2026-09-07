@@ -19,7 +19,20 @@ import L from "leaflet";
 import { useTheme } from "@/lib/theme-provider";
 import { useAlert } from "@/lib/alert-context";
 import { ALERT_LEVELS } from "@/lib/alert-context";
-import { fetchVolcanoes, fetchBMKG, getBearing, computeDestination, haversineKm, Volcano, Earthquake, levelFromEarthquake } from "@/lib/live-api";
+import {
+  fetchVolcanoes,
+  fetchBMKG,
+  fetchWind,
+  getBearing,
+  computeDestination,
+  haversineKm,
+  cardinalFrom,
+  cardinalTo,
+  Volcano,
+  Earthquake,
+  levelFromEarthquake,
+  type WindData,
+} from "@/lib/live-api";
 import { Wind, Layers, Navigation, Info, X, SlidersHorizontal, Satellite } from "lucide-react";
 
 type Direction = "N" | "S" | "E" | "W";
@@ -33,6 +46,14 @@ const DIRECTION_DEGREES: Record<Direction, number> = {
 };
 
 const DIRECTIONS: Direction[] = ["N", "S", "E", "W"];
+
+function toCardinal4(deg: number): Direction {
+  const d = ((deg % 360) + 360) % 360;
+  if (d >= 45 && d < 135) return "E";
+  if (d >= 135 && d < 225) return "S";
+  if (d >= 225 && d < 315) return "W";
+  return "N";
+}
 
 function getDotIcon(color: string) {
   return L.divIcon({
@@ -107,6 +128,7 @@ export default function MapClient() {
     const allowed: TileProvider[] = ["osm", "esri-street"];
     return allowed.includes(env) ? env : "esri-street";
   });
+  const [wind, setWind] = useState<WindData | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -133,6 +155,18 @@ export default function MapClient() {
   );
   const zoom = useMemo(() => (selectedKelurahan ? 13 : 5), [selectedKelurahan]);
 
+  useEffect(() => {
+    fetchWind(mapCenter[0], mapCenter[1])
+      .then(setWind)
+      .catch(() => setWind(null));
+  }, [mapCenter[0], mapCenter[1]]);
+
+  useEffect(() => {
+    if (!wind) return;
+    setDirection(toCardinal4(wind.windDirectionTo));
+    setWindSpeed(Math.min(100, Math.max(0, Math.round((wind.windSpeed / 80) * 100))));
+  }, [wind]);
+
   const volcanoCoords: [number, number] =
     nearestVolcano && nearestVolcano.item.lat != null && nearestVolcano.item.lon != null
       ? [nearestVolcano.item.lat, nearestVolcano.item.lon]
@@ -155,6 +189,15 @@ export default function MapClient() {
     }
     return computeDestination(mapCenter, 45, 10);
   }, [mapCenter, nearestVolcano]);
+
+  const earthquakeRadius = useMemo(() => {
+    const m = nearestEarthquake?.item.magnitude ?? 0;
+    if (!m) return 5000;
+    const depth = nearestEarthquake?.item.depthKm ?? 0;
+    const depthFactor = Math.max(0.3, 1 - depth / 300);
+    const r = Math.round(m * 2500 * depthFactor);
+    return Math.min(Math.max(r, 3000), 35000);
+  }, [nearestEarthquake]);
 
   const tileConfig = useMemo(() => {
     const osmAttr =
@@ -311,9 +354,19 @@ export default function MapClient() {
         {layers.earthquake && (
           <Circle
             center={epicenterCoords}
-            radius={5000}
+            radius={earthquakeRadius}
             pathOptions={earthquakePathOptions}
-          />
+          >
+            <Popup>
+              <div className="text-bg">
+                <strong>Gempa M {nearestEarthquake?.item.magnitude ?? "-"}</strong>
+                <br />
+                Kedalaman {nearestEarthquake?.item.depthKm ?? "-"} km
+                <br />
+                Radius dampak simulasi: {(earthquakeRadius / 1000).toFixed(1)} km
+              </div>
+            </Popup>
+          </Circle>
         )}
         {layers.evacuation && (
           <>
@@ -389,9 +442,21 @@ export default function MapClient() {
             </select>
           </div>
 
+          {wind && (
+            <div className="mb-3 rounded-lg border border-card-border bg-white/5 p-2.5">
+              <p className="text-[10px] text-fg-muted">
+                Angin {cardinalFrom(wind.windDirectionFrom)} {wind.windSpeed} km/jam
+              </p>
+              <p className="text-[10px] text-fg">
+                Abu ke {cardinalTo(wind.windDirectionFrom)}
+              </p>
+              <p className="text-[9px] text-fg/60">Sumber: Open-Meteo</p>
+            </div>
+          )}
+
         <div className="mb-4">
           <label className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted">
-            <Navigation className="h-3.5 w-3.5" /> Arah Angin
+            <Navigation className="h-3.5 w-3.5" /> Arah Sebaran Abu
           </label>
           <div className="grid grid-cols-4 gap-2">
             {DIRECTIONS.map((dir) => (
@@ -479,7 +544,7 @@ export default function MapClient() {
           <p className="text-[11px] leading-relaxed text-fg-muted">
             {loading
               ? "Memuat data gunung api dan gempa..."
-              : `Memantau ${volcanoes.length} gunung api aktif dan ${earthquakes.length} gempa.`}
+              : `Memantau ${volcanoes.length} gunung api aktif dan ${earthquakes.length} gempa. Arah abu mengikuti angin real-time Open-Meteo.`}
           </p>
         </div>
       </div>
