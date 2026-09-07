@@ -10,7 +10,7 @@ export default function ThreeDHazardPage() {
       <div>
         <h2 className="text-2xl font-bold text-fg">3D Hazard Zone</h2>
         <p className="text-sm text-fg-muted">
-          Visualisasi 3D gunung api, radius KRB, gelombang gempa, dan awan abu.
+          radius KRB, gelombang gempa, dan awan abu.
         </p>
       </div>
 

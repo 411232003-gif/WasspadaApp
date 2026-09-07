@@ -10,7 +10,7 @@ export default function LiveMapPage() {
       <div>
         <h2 className="text-2xl font-bold text-fg">Live Map</h2>
         <p className="text-sm text-fg-muted">
-          Peta interaktif potensi sebaran abu vulkanik dan radius dampak bencana.
+          potensi sebaran abu vulkanik dan radius dampak bencana.
         </p>
       </div>
 
