@@ -48,6 +48,9 @@ const DIRECTION_DEGREES: Record<Direction, number> = {
 
 const DIRECTIONS: Direction[] = ["N", "S", "E", "W"];
 
+const MOCK_GUNUNG_ROMANTIS = "/gunung-romantis.jpeg";
+const MOCK_GUNUNG_SUPER_AKTIF = "/gunung-super-aktif.jpeg";
+
 function toCardinal4(deg: number): Direction {
   const d = ((deg % 360) + 360) % 360;
   if (d >= 45 && d < 135) return "E";
@@ -85,6 +88,18 @@ function getAshLabelIcon(text: string) {
     html: `<div class="whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-[10px] text-white backdrop-blur-sm" style="border:1px solid rgba(255,255,255,0.2);">${text}</div>`,
     iconSize: [80, 24],
     iconAnchor: [40, 12],
+  });
+}
+
+function getImageIcon(url: string, active = false) {
+  const ring = active
+    ? `<div style="position:absolute;inset:-4px;border-radius:9999px;border:3px solid #ef4444;box-shadow:0 0 18px #ef4444;"></div>`
+    : "";
+  return L.divIcon({
+    className: "bg-transparent",
+    html: `<div style="position:relative;width:48px;height:48px;">${ring}<img src="${url}" alt="gunung" style="width:48px;height:48px;border-radius:9999px;object-fit:cover;border:2px solid #fff;box-shadow:0 0 12px rgba(0,0,0,0.5);" /></div>`,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
   });
 }
 
@@ -323,6 +338,45 @@ export default function MapClient() {
       });
   }, [volcanoes]);
 
+  const mockVolcanoMarkers = useMemo(() => {
+    const offset = 0.02;
+    return [
+      {
+        key: "mock-romantis",
+        name: "Gunung Romantis",
+        position: [mapCenter[0] + offset, mapCenter[1] + offset] as [number, number],
+        image: MOCK_GUNUNG_ROMANTIS,
+        active: false,
+        status: "Mock - Level 10 Romantis",
+      },
+      {
+        key: "mock-super",
+        name: "Gunung Super Aktif Level 10",
+        position: [mapCenter[0] - offset, mapCenter[1] - offset] as [number, number],
+        image: MOCK_GUNUNG_SUPER_AKTIF,
+        active: true,
+        status: "Mock - Level 10 Super Aktif",
+      },
+    ].map((v) => (
+      <Marker
+        key={v.key}
+        position={v.position}
+        icon={getImageIcon(v.image, v.active)}
+        zIndexOffset={1000}
+      >
+        <Popup>
+          <div className="text-bg max-w-[180px]">
+            <strong>{v.name}</strong>
+            <br />
+            <span className="text-fg-muted">{v.status}</span>
+            <br />
+            <span className="text-[10px] text-fg/60">Data bohongan / lucu-lucuan saja</span>
+          </div>
+        </Popup>
+      </Marker>
+    ));
+  }, [mapCenter]);
+
   const earthquakeMarkers = useMemo(() => {
     return (earthquakes || []).map((e) => {
       const level = levelFromEarthquake(e.magnitude || 0);
@@ -384,6 +438,8 @@ export default function MapClient() {
             {volcanoMarkers}
           </MarkerClusterGroup>
         )}
+
+        {mockVolcanoMarkers}
 
         {layers.earthquake && earthquakeMarkers.length > 0 && (
           <MarkerClusterGroup
