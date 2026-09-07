@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import "react-leaflet-cluster/dist/assets/MarkerCluster.css";
 import "react-leaflet-cluster/dist/assets/MarkerCluster.Default.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -12,6 +12,7 @@ import {
   Polygon,
   Circle,
   Polyline,
+  Tooltip,
   useMap,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
@@ -61,6 +62,29 @@ function getDotIcon(color: string) {
     html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};box-shadow:0 0 10px ${color};border:2px solid rgba(255,255,255,0.4);"></div>`,
     iconSize: [12, 12],
     iconAnchor: [6, 6],
+  });
+}
+
+function getVolcanoIcon(color: string, level: number) {
+  const isActive = level >= 3;
+  const size = level === 4 ? "1rem" : "0.75rem";
+  return L.divIcon({
+    className: "bg-transparent",
+    html: `<div class="map-marker" style="--accent:${color}">
+      <div class="map-marker-core" style="width:${size};height:${size};background-color:${color};box-shadow:0 0 10px ${color};"></div>
+      ${isActive ? `<div class="map-marker-ring" style="border-color:${color};box-shadow:0 0 10px ${color};"></div>` : ""}
+    </div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+function getAshLabelIcon(text: string) {
+  return L.divIcon({
+    className: "bg-transparent",
+    html: `<div class="whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-[10px] text-white backdrop-blur-sm" style="border:1px solid rgba(255,255,255,0.2);">${text}</div>`,
+    iconSize: [80, 24],
+    iconAnchor: [40, 12],
   });
 }
 
@@ -129,6 +153,8 @@ export default function MapClient() {
     return allowed.includes(env) ? env : "esri-street";
   });
   const [wind, setWind] = useState<WindData | null>(null);
+  const [shaking, setShaking] = useState(false);
+  const lastTsRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -166,6 +192,17 @@ export default function MapClient() {
     setDirection(toCardinal4(wind.windDirectionTo));
     setWindSpeed(Math.min(100, Math.max(0, Math.round((wind.windSpeed / 80) * 100))));
   }, [wind]);
+
+  useEffect(() => {
+    const ts = nearestEarthquake?.item?.timestamp || null;
+    const mag = nearestEarthquake?.item?.magnitude || 0;
+    if (ts && lastTsRef.current && ts !== lastTsRef.current && mag >= 4.5) {
+      setShaking(true);
+      const t = setTimeout(() => setShaking(false), 600);
+      return () => clearTimeout(t);
+    }
+    lastTsRef.current = ts;
+  }, [nearestEarthquake?.item?.timestamp, nearestEarthquake?.item?.magnitude]);
 
   const volcanoCoords: [number, number] =
     nearestVolcano && nearestVolcano.item.lat != null && nearestVolcano.item.lon != null
@@ -229,10 +266,20 @@ export default function MapClient() {
     return computeAshPolygon(volcanoCoords, DIRECTION_DEGREES[direction], radius);
   }, [direction, windSpeed, volcanoCoords]);
 
+  const ashTip = useMemo(() => {
+    const radius = 0.01 + (windSpeed / 100) * 0.07;
+    return computeDestination(volcanoCoords, DIRECTION_DEGREES[direction], radius);
+  }, [volcanoCoords, direction, windSpeed]);
+
+  const ashDirectionLabel = useMemo(() => {
+    if (wind) return `Abu ke ${cardinalTo(wind.windDirectionFrom)}`;
+    return `Abu ke ${direction}`;
+  }, [wind, direction]);
+
   const ashPathOptions = {
     color: accent,
     fillColor: accent,
-    fillOpacity: 0.1 + (ashIntensity / 100) * 0.5,
+    fillOpacity: 0.15 + (ashIntensity / 100) * 0.55,
     weight: 2,
     dashArray: "4 6" as const,
   };
@@ -260,7 +307,7 @@ export default function MapClient() {
           <Marker
             key={`v-${v.name}`}
             position={[v.lat!, v.lon!] as [number, number]}
-            icon={getDotIcon(color)}
+            icon={getVolcanoIcon(color, v.level)}
           >
             <Popup>
               <div className="text-bg">
@@ -306,7 +353,7 @@ export default function MapClient() {
         center={mapCenter}
         zoom={zoom}
         scrollWheelZoom
-        className="h-full w-full"
+        className={`h-full w-full ${shaking ? "shake-map" : ""}`}
       >
         <MapCenter center={mapCenter} zoom={zoom} />
         <TileLayer
@@ -349,7 +396,22 @@ export default function MapClient() {
         )}
 
         {layers.ash && (
-          <Polygon positions={ashPolygon} pathOptions={ashPathOptions} />
+          <Polygon positions={ashPolygon} pathOptions={ashPathOptions}>
+            <Tooltip
+              direction="top"
+              offset={[0, -10]}
+              opacity={1}
+              permanent
+              className="bg-transparent border-0 shadow-none"
+            >
+              <span className="whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
+                {ashDirectionLabel}
+              </span>
+            </Tooltip>
+          </Polygon>
+        )}
+        {layers.ash && nearestVolcano && (
+          <Marker position={ashTip} icon={getAshLabelIcon(ashDirectionLabel)} zIndexOffset={1000} />
         )}
         {layers.earthquake && (
           <Circle
