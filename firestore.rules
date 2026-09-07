@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Public alert feed. Anyone can read; only authenticated users can post,
+    // and they must tag the alert with their own uid.
+    match /disaster_alerts/{doc} {
+      allow read: if true;
+      allow create: if isAuthenticated()
+                     && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated()
+                             && resource.data.userId == request.auth.uid;
+    }
+
+    // User-scoped bookmarks and subscriptions.
+    match /users/{userId} {
+      match /kelurahan_bookmarks/{doc} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+      match /alert_subscriptions/{doc} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+    }
+  }
+}

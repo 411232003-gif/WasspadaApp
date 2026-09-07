@@ -12,7 +12,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
-import { db, isFirebaseConfigured } from "./firebase";
+import { db, ensureUser, isFirebaseConfigured } from "./firebase";
 
 export type AlertType = "earthquake" | "volcano";
 
@@ -27,10 +27,11 @@ export interface AlertDoc {
   location?: string;
   tsunamiPotential?: string;
   volcanoStatus?: string;
+  userId?: string;
   createdAt: Timestamp | number;
 }
 
-export type AlertInput = Omit<AlertDoc, "id" | "createdAt">;
+export type AlertInput = Omit<AlertDoc, "id" | "createdAt" | "userId">;
 type AlertCallback = (alerts: AlertDoc[]) => void;
 
 export interface BookmarkDoc {
@@ -39,20 +40,22 @@ export interface BookmarkDoc {
   lat: number;
   lon: number;
   note?: string;
+  userId: string;
   createdAt: Timestamp | number;
 }
 
-export type BookmarkInput = Omit<BookmarkDoc, "id" | "createdAt">;
+export type BookmarkInput = Omit<BookmarkDoc, "id" | "createdAt" | "userId">;
 type BookmarkCallback = (bookmarks: BookmarkDoc[]) => void;
 
 export interface SubscriptionDoc {
   id: string;
   volcanoName: string;
   targetLevel: 1 | 2 | 3 | 4;
+  userId: string;
   createdAt: Timestamp | number;
 }
 
-export type SubscriptionInput = Omit<SubscriptionDoc, "id" | "createdAt">;
+export type SubscriptionInput = Omit<SubscriptionDoc, "id" | "createdAt" | "userId">;
 type SubscriptionCallback = (subscriptions: SubscriptionDoc[]) => void;
 
 const COLLECTION_ALERTS = "disaster_alerts";
@@ -80,10 +83,21 @@ function notifyMockSubscriptions() {
   mockSubscriptionSubscribers.forEach((cb) => cb([...mockSubscriptions]));
 }
 
+function userBookmarksPath(userId: string) {
+  return collection(db!, "users", userId, COLLECTION_BOOKMARKS);
+}
+
+function userSubscriptionsPath(userId: string) {
+  return collection(db!, "users", userId, COLLECTION_SUBSCRIPTIONS);
+}
+
 export async function pushAlert(data: AlertInput): Promise<string> {
-  if (db) {
+  const user = await ensureUser();
+
+  if (db && user) {
     const docRef = await addDoc(collection(db, COLLECTION_ALERTS), {
       ...data,
+      userId: user.uid,
       createdAt: serverTimestamp(),
     });
     return docRef.id;
@@ -93,6 +107,7 @@ export async function pushAlert(data: AlertInput): Promise<string> {
   const alert: AlertDoc = {
     ...data,
     id,
+    userId: "anonymous",
     createdAt: Date.now(),
   };
   mockAlerts.unshift(alert);
@@ -127,24 +142,29 @@ export function subscribeAlerts(callback: AlertCallback): () => void {
 }
 
 export async function addBookmark(data: BookmarkInput): Promise<string> {
-  if (db) {
-    const docRef = await addDoc(collection(db, COLLECTION_BOOKMARKS), {
+  const user = await ensureUser();
+
+  if (db && user) {
+    const docRef = await addDoc(userBookmarksPath(user.uid), {
       ...data,
+      userId: user.uid,
       createdAt: serverTimestamp(),
     });
     return docRef.id;
   }
 
   const id = Math.random().toString(36).slice(2, 11);
-  const bookmark: BookmarkDoc = { ...data, id, createdAt: Date.now() };
+  const bookmark: BookmarkDoc = { ...data, id, userId: "anonymous", createdAt: Date.now() };
   mockBookmarks.unshift(bookmark);
   notifyMockBookmarks();
   return id;
 }
 
 export async function removeBookmark(id: string): Promise<void> {
-  if (db) {
-    await deleteDoc(doc(db, COLLECTION_BOOKMARKS, id));
+  const user = await ensureUser();
+
+  if (db && user) {
+    await deleteDoc(doc(db, "users", user.uid, COLLECTION_BOOKMARKS, id));
     return;
   }
   const idx = mockBookmarks.findIndex((b) => b.id === id);
@@ -155,20 +175,32 @@ export async function removeBookmark(id: string): Promise<void> {
 }
 
 export function subscribeBookmarks(callback: BookmarkCallback): () => void {
+  const userPromise = ensureUser();
+
   if (db) {
-    const q = query(
-      collection(db, COLLECTION_BOOKMARKS),
-      orderBy("createdAt", "desc"),
-      limit(20)
-    );
-    return onSnapshot(q, (snapshot) => {
-      const bookmarks = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as BookmarkInput),
-        createdAt: docSnap.data().createdAt as Timestamp | number,
-      }));
-      callback(bookmarks);
+    const unsubscribePromise = userPromise.then((user) => {
+      if (!user) {
+        callback([...mockBookmarks]);
+        return () => {};
+      }
+      const q = query(
+        userBookmarksPath(user.uid),
+        orderBy("createdAt", "desc"),
+        limit(20)
+      );
+      return onSnapshot(q, (snapshot) => {
+        const bookmarks = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as BookmarkInput),
+          createdAt: docSnap.data().createdAt as Timestamp | number,
+        }));
+        callback(bookmarks);
+      });
     });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
   }
 
   callback([...mockBookmarks]);
@@ -182,9 +214,12 @@ export function subscribeBookmarks(callback: BookmarkCallback): () => void {
 export async function addSubscription(
   data: SubscriptionInput
 ): Promise<string> {
-  if (db) {
-    const docRef = await addDoc(collection(db, COLLECTION_SUBSCRIPTIONS), {
+  const user = await ensureUser();
+
+  if (db && user) {
+    const docRef = await addDoc(userSubscriptionsPath(user.uid), {
       ...data,
+      userId: user.uid,
       createdAt: serverTimestamp(),
     });
     return docRef.id;
@@ -194,6 +229,7 @@ export async function addSubscription(
   const subscription: SubscriptionDoc = {
     ...data,
     id,
+    userId: "anonymous",
     createdAt: Date.now(),
   };
   mockSubscriptions.unshift(subscription);
@@ -204,20 +240,32 @@ export async function addSubscription(
 export function subscribeSubscriptions(
   callback: SubscriptionCallback
 ): () => void {
+  const userPromise = ensureUser();
+
   if (db) {
-    const q = query(
-      collection(db, COLLECTION_SUBSCRIPTIONS),
-      orderBy("createdAt", "desc"),
-      limit(20)
-    );
-    return onSnapshot(q, (snapshot) => {
-      const subscriptions = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as SubscriptionInput),
-        createdAt: docSnap.data().createdAt as Timestamp | number,
-      }));
-      callback(subscriptions);
+    const unsubscribePromise = userPromise.then((user) => {
+      if (!user) {
+        callback([...mockSubscriptions]);
+        return () => {};
+      }
+      const q = query(
+        userSubscriptionsPath(user.uid),
+        orderBy("createdAt", "desc"),
+        limit(20)
+      );
+      return onSnapshot(q, (snapshot) => {
+        const subscriptions = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as SubscriptionInput),
+          createdAt: docSnap.data().createdAt as Timestamp | number,
+        }));
+        callback(subscriptions);
+      });
     });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
   }
 
   callback([...mockSubscriptions]);
