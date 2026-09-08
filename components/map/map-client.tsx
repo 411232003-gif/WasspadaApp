@@ -181,12 +181,19 @@ export default function MapClient() {
       try {
         const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
         setVolcanoes((vRes.error ? [] : vRes.volcanoes) || []);
-        const eqs = bRes.error
+        const rawEqs = bRes.error
           ? []
           : [bRes.latest, ...(bRes.felt || [])].filter(
               (e): e is Earthquake => e != null && e.coordinates != null
             );
-        setEarthquakes(eqs || []);
+        const seen = new Set<string>();
+        const eqs = rawEqs.filter((e) => {
+          const key = e.timestamp || `${e.coordinates?.join(",")}-${e.magnitude}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setEarthquakes(eqs);
       } finally {
         setLoading(false);
       }
@@ -390,12 +397,12 @@ export default function MapClient() {
   }, []);
 
   const earthquakeMarkers = useMemo(() => {
-    return (earthquakes || []).map((e) => {
+    return (earthquakes || []).map((e, i) => {
       const level = levelFromEarthquake(e.magnitude || 0);
       const color = ALERT_LEVELS[level].color;
       return (
         <Marker
-          key={`e-${e.timestamp || e.location || Math.random()}`}
+          key={`e-${e.timestamp || e.location || i}`}
           position={e.coordinates as [number, number]}
           icon={getDotIcon(color)}
         >

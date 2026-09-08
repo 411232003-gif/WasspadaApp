@@ -114,31 +114,51 @@ function findBestMatch(name: string, coords: CsvVolcano[]) {
 }
 
 export async function GET() {
+  let pvmbgList: PvmbgVolcano[] = [];
+  let pvmbgError = "";
   try {
-    const [pvmbgList, coordsList] = await Promise.all([
-      fetchPVMBGVolcanoes(),
-      fetchVolcanoCoordinates(),
-    ]);
-
-    const volcanoes = pvmbgList
-      .map((v) => {
-        const match = findBestMatch(v.name, coordsList);
-        return {
-          name: v.name,
-          level: v.level,
-          status: v.status,
-          lat: match?.lat ?? null,
-          lon: match?.lon ?? null,
-          region: match?.region || "Indonesia",
-        };
-      })
-      .filter((v) => v.lat !== null && v.lon !== null);
-
-    return NextResponse.json({ volcanoes, updatedAt: new Date().toISOString() });
+    pvmbgList = await fetchPVMBGVolcanoes();
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Gagal memuat data gunung api", volcanoes: [], updatedAt: new Date().toISOString() },
-      { status: 502 }
-    );
+    pvmbgError = error.message || "PVMBG gagal";
+    console.error("PVMBG fetch failed:", pvmbgError);
   }
+
+  let coordsList: CsvVolcano[] = [];
+  try {
+    coordsList = await fetchVolcanoCoordinates();
+  } catch (error: any) {
+    console.error("CSV fetch failed:", error.message);
+  }
+
+  // Fallback ke semua koordinat CSV dengan level Normal kalau PVMBG mati
+  if (pvmbgList.length === 0 && coordsList.length > 0) {
+    return NextResponse.json({
+      volcanoes: coordsList.map((c) => ({
+        name: c.name,
+        level: 1,
+        status: "Level I",
+        lat: c.lat,
+        lon: c.lon,
+        region: c.region,
+      })),
+      warning: pvmbgError || undefined,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  const volcanoes = pvmbgList
+    .map((v) => {
+      const match = findBestMatch(v.name, coordsList);
+      return {
+        name: v.name,
+        level: v.level,
+        status: v.status,
+        lat: match?.lat ?? null,
+        lon: match?.lon ?? null,
+        region: match?.region || "Indonesia",
+      };
+    })
+    .filter((v) => v.lat !== null && v.lon !== null);
+
+  return NextResponse.json({ volcanoes, updatedAt: new Date().toISOString() });
 }
