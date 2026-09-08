@@ -51,7 +51,10 @@ const DIRECTIONS: Direction[] = ["N", "S", "E", "W"];
 const MOCK_GUNUNG_ROMANTIS = "/gunung-romantis.jpeg";
 const MOCK_GUNUNG_SUPER_AKTIF = "/gunung-super-aktif.jpeg";
 const MOCK_GUNUNG_BOQO = "/gunung-boqo.jpeg";
-const MOCK_BASE_COORDS: [number, number] = [-5.78333, 105.625]; // sekitar Gunung Rajabasa, Lampung
+// Koordinat perkiraan dari OpenStreetMap / pencarian web
+const MOCK_GUNUNG_ROMANTIS_COORDS: [number, number] = [-6.1853385, 106.7039619]; // Green Lake City Boulevard, Tangerang (dekat Cluster Amerika)
+const MOCK_GUNUNG_SUPER_AKTIF_COORDS: [number, number] = [-6.1795803, 106.8070524]; // Jalan Semangka II, Jati Pulo, Tomang
+const MOCK_GUNUNG_BOQO_COORDS: [number, number] = [-5.78333, 105.625]; // sekitar Gunung Rajabasa, Lampung
 
 function toCardinal4(deg: number): Direction {
   const d = ((deg % 360) + 360) % 360;
@@ -341,12 +344,11 @@ export default function MapClient() {
   }, [volcanoes]);
 
   const mockVolcanoMarkers = useMemo(() => {
-    const offset = 0.025;
     return [
       {
         key: "mock-romantis",
         name: "Gunung Romantis",
-        position: [MOCK_BASE_COORDS[0] + offset, MOCK_BASE_COORDS[1] + offset] as [number, number],
+        position: MOCK_GUNUNG_ROMANTIS_COORDS,
         image: MOCK_GUNUNG_ROMANTIS,
         active: false,
         status: "Mock - Level 10 Romantis",
@@ -354,7 +356,7 @@ export default function MapClient() {
       {
         key: "mock-super",
         name: "Gunung Super Aktif Level 10",
-        position: [MOCK_BASE_COORDS[0] - offset, MOCK_BASE_COORDS[1] - offset] as [number, number],
+        position: MOCK_GUNUNG_SUPER_AKTIF_COORDS,
         image: MOCK_GUNUNG_SUPER_AKTIF,
         active: true,
         status: "Mock - Level 10 Super Aktif",
@@ -362,7 +364,7 @@ export default function MapClient() {
       {
         key: "mock-boqo",
         name: "Gunung {BOQO bowo qodri}",
-        position: [MOCK_BASE_COORDS[0] + offset, MOCK_BASE_COORDS[1] - offset] as [number, number],
+        position: MOCK_GUNUNG_BOQO_COORDS,
         image: MOCK_GUNUNG_BOQO,
         active: true,
         status: "Mock - Level 9 Aktif",
