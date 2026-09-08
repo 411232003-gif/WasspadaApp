@@ -50,6 +50,7 @@ const DIRECTIONS: Direction[] = ["N", "S", "E", "W"];
 
 const MOCK_GUNUNG_ROMANTIS = "/gunung-romantis.jpeg";
 const MOCK_GUNUNG_SUPER_AKTIF = "/gunung-super-aktif.jpeg";
+const MOCK_GUNUNG_BOQO = "/gunung-boqo.jpeg";
 
 function toCardinal4(deg: number): Direction {
   const d = ((deg % 360) + 360) % 360;
@@ -339,7 +340,7 @@ export default function MapClient() {
   }, [volcanoes]);
 
   const mockVolcanoMarkers = useMemo(() => {
-    const offset = 0.02;
+    const offset = 0.025;
     return [
       {
         key: "mock-romantis",
@@ -356,6 +357,14 @@ export default function MapClient() {
         image: MOCK_GUNUNG_SUPER_AKTIF,
         active: true,
         status: "Mock - Level 10 Super Aktif",
+      },
+      {
+        key: "mock-boqo",
+        name: "Gunung {BOQO bowo qodri}",
+        position: [mapCenter[0] + offset, mapCenter[1] - offset] as [number, number],
+        image: MOCK_GUNUNG_BOQO,
+        active: true,
+        status: "Mock - Level 9 Aktif",
       },
     ].map((v) => (
       <Marker
