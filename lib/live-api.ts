@@ -62,13 +62,17 @@ export interface WilayahResponse {
   error?: string;
 }
 
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : "Kesalahan tidak diketahui";
+}
+
 export async function fetchBMKG(): Promise<BmkgResponse> {
   try {
     const res = await fetch("/api/bmkg");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (e: any) {
-    return { latest: null, felt: [], updatedAt: new Date().toISOString(), error: e.message };
+  } catch (e) {
+    return { latest: null, felt: [], updatedAt: new Date().toISOString(), error: errMsg(e) };
   }
 }
 
@@ -77,8 +81,8 @@ export async function fetchPVMBG(): Promise<PvmbgResponse> {
     const res = await fetch("/api/pvmbg");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (e: any) {
-    return { volcanoes: [], updatedAt: new Date().toISOString(), error: e.message };
+  } catch (e) {
+    return { volcanoes: [], updatedAt: new Date().toISOString(), error: errMsg(e) };
   }
 }
 
@@ -87,8 +91,8 @@ export async function fetchVolcanoes(): Promise<VolcanoesResponse> {
     const res = await fetch("/api/volcanoes");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch (e: any) {
-    return { volcanoes: [], updatedAt: new Date().toISOString(), error: e.message };
+  } catch (e) {
+    return { volcanoes: [], updatedAt: new Date().toISOString(), error: errMsg(e) };
   }
 }
 
@@ -108,8 +112,8 @@ export async function fetchWilayah(
       count: data.count || 0,
       entities: Array.isArray(data.entities) ? data.entities : [],
     };
-  } catch (e: any) {
-    return { level, count: 0, entities: [], error: e.message };
+  } catch (e) {
+    return { level, count: 0, entities: [], error: errMsg(e) };
   }
 }
 
@@ -253,13 +257,13 @@ export async function fetchWind(lat: number, lon: number): Promise<WindData> {
       windDirectionTo: (from + 180) % 360,
       updatedAt: new Date().toISOString(),
     };
-  } catch (e: any) {
+  } catch (e) {
     return {
       windSpeed: 0,
       windDirectionFrom: 0,
       windDirectionTo: 180,
       updatedAt: new Date().toISOString(),
-      error: e.message,
+      error: errMsg(e),
     };
   }
 }

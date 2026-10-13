@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Html } from "@react-three/drei";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
-import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal, Info, AlertTriangle, MousePointer2, Wind, Navigation } from "lucide-react";
+import { Flame, Waves, Cloud, RotateCcw, Layers, Eye, X, SlidersHorizontal, Info, AlertTriangle, MousePointer2, Wind } from "lucide-react";
 import { useAlert, ALERT_LEVELS } from "@/lib/alert-context";
 import {
   fetchWind,
@@ -24,6 +25,19 @@ interface LayersState {
 }
 
 const SCENE_SCALE = 0.5;
+
+// RNG deterministik (mulberry32) — aman dipakai di useMemo
+// tanpa melanggar aturan purity render React.
+function seededRandom(seed: number) {
+  let a = seed;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 const KRB_RINGS = [
   {
@@ -149,24 +163,27 @@ function SmokeParticles({
   }, [windSpeed, windTo]);
 
   const positions = useMemo(() => {
+    const rand = seededRandom(count * 31 + 7);
     const arr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * spread;
+      const angle = rand() * Math.PI * 2;
+      const r = rand() * spread;
       arr[i3] = position[0] + Math.cos(angle) * r;
-      arr[i3 + 1] = position[1] + 3 + Math.random() * 1.2;
+      arr[i3 + 1] = position[1] + 3 + rand() * 1.2;
       arr[i3 + 2] = position[2] + Math.sin(angle) * r;
     }
     return arr;
   }, [count, spread, position]);
 
   const speeds = useMemo(() => {
-    return new Float32Array(count).fill(0).map(() => 0.4 + Math.random() * 0.8);
+    const rand = seededRandom(count * 17 + 3);
+    return new Float32Array(count).fill(0).map(() => 0.4 + rand() * 0.8);
   }, [count]);
 
   const drifts = useMemo(() => {
-    return new Float32Array(count * 2).fill(0).map(() => (Math.random() - 0.5) * 0.3);
+    const rand = seededRandom(count * 13 + 5);
+    return new Float32Array(count * 2).fill(0).map(() => (rand() - 0.5) * 0.3);
   }, [count]);
 
   useFrame((_, delta) => {
@@ -366,7 +383,7 @@ export default function SceneClient() {
   });
   const [panelOpen, setPanelOpen] = useState(true);
   const [wind, setWind] = useState<WindData | null>(null);
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const { disasterCenter, nearestVolcano, nearestEarthquake } = useAlert();
 
   useEffect(() => {

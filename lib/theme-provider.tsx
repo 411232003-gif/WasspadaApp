@@ -8,7 +8,7 @@ import {
   ReactNode,
 } from "react";
 
-export type ThemeMode = "dark" | "maroon";
+export type ThemeMode = "dark" | "light";
 
 interface ThemeContextValue {
   theme: ThemeMode;
@@ -21,28 +21,21 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = "wasspada-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>("dark");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-    if (saved === "dark" || saved === "maroon") {
-      setThemeState(saved);
-    }
-    setMounted(true);
-  }, []);
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "dark";
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved === "dark" || saved === "light" ? saved : "dark";
+  });
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    if (mounted) {
-      localStorage.setItem(STORAGE_KEY, theme);
-    }
-  }, [theme, mounted]);
+    localStorage.setItem(STORAGE_KEY, theme);
+  }, [theme]);
 
   const setTheme = (value: ThemeMode) => setThemeState(value);
 
   const toggleTheme = () =>
-    setThemeState((prev) => (prev === "dark" ? "maroon" : "dark"));
+    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>

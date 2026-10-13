@@ -38,7 +38,6 @@ export function LiveDataPanel() {
   const [logStatus, setLogStatus] = useState<string | null>(null);
 
   const load = async () => {
-    setLoading(true);
     try {
       const [b, p] = await Promise.all([fetchBMKG(), fetchPVMBG()]);
       setBmkg(b);

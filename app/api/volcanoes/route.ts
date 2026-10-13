@@ -118,16 +118,16 @@ export async function GET() {
   let pvmbgError = "";
   try {
     pvmbgList = await fetchPVMBGVolcanoes();
-  } catch (error: any) {
-    pvmbgError = error.message || "PVMBG gagal";
-    console.error("PVMBG fetch failed:", pvmbgError);
+  } catch (error) {
+    pvmbgError = "PVMBG gagal";
+    console.error("PVMBG fetch failed:", error);
   }
 
   let coordsList: CsvVolcano[] = [];
   try {
     coordsList = await fetchVolcanoCoordinates();
-  } catch (error: any) {
-    console.error("CSV fetch failed:", error.message);
+  } catch (error) {
+    console.error("CSV fetch failed:", error);
   }
 
   // Fallback ke semua koordinat CSV dengan level Normal kalau PVMBG mati

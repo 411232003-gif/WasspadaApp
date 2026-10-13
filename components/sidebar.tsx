@@ -57,6 +57,7 @@ export function Sidebar() {
     <div className={`gs-wrap${open ? " open" : ""} hidden md:block`}>
       {/* ===== rail ikon (selalu terlihat) ===== */}
       <aside className="gs-rail">
+        <span className="gs-shine" />
         <WindowDots />
 
         <button
@@ -77,7 +78,7 @@ export function Sidebar() {
             const active = pathname === item.href;
             return (
               <li key={item.href} className={active ? "active" : ""}>
-                <Link href={item.href} aria-label={item.label} title={item.label}>
+                <Link href={item.href} aria-label={item.label} data-tip={item.label}>
                   <Icon className="h-5 w-5" />
                 </Link>
               </li>
@@ -94,25 +95,31 @@ export function Sidebar() {
                 type="button"
                 onClick={handleLogout}
                 aria-label="Keluar"
-                title="Keluar"
+                data-tip="Keluar"
               >
                 <LogOut className="h-5 w-5" />
               </button>
             ) : (
-              <Link href="/login" aria-label="Masuk" title="Masuk">
+              <Link href="/login" aria-label="Masuk" data-tip="Masuk">
                 <LogIn className="h-5 w-5" />
               </Link>
             )}
           </li>
         </ul>
 
-        <Link href="/login" className="gs-profile" aria-label={displayName}>
+        <Link
+          href="/login"
+          className="gs-profile"
+          aria-label={displayName}
+          data-tip={user ? displayName : "Masuk"}
+        >
           <span className="gs-avatar">{initial}</span>
         </Link>
       </aside>
 
       {/* ===== panel yang mengembang ===== */}
       <section className="gs-panel" aria-hidden={!open}>
+        <span className="gs-shine" />
         <WindowDots big />
 
         <h1 className="gs-title">Wasspada</h1>

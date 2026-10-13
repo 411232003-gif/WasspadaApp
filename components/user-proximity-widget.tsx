@@ -112,7 +112,7 @@ export function UserProximityWidget() {
       ) : (
         <div className="py-4 text-center">
           <p className="text-sm text-fg-muted">
-            Tekan "Cek Lokasi" untuk menghitung jarak Anda dari gunung dan
+            Tekan &ldquo;Cek Lokasi&rdquo; untuk menghitung jarak Anda dari gunung dan
             mengecek zona KRB.
           </p>
         </div>

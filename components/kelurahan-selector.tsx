@@ -38,33 +38,21 @@ export function KelurahanSelector() {
   }, []);
 
   useEffect(() => {
-    if (!selectedProvince) {
-      setRegencies([]);
-      return;
-    }
+    if (!selectedProvince) return;
     fetchWilayah("regency", selectedProvince.slug).then((res) => {
       setRegencies(res.entities);
-      setDistricts([]);
-      setVillages([]);
     });
   }, [selectedProvince]);
 
   useEffect(() => {
-    if (!selectedRegency) {
-      setDistricts([]);
-      return;
-    }
+    if (!selectedRegency) return;
     fetchWilayah("district", selectedRegency.slug).then((res) => {
       setDistricts(res.entities);
-      setVillages([]);
     });
   }, [selectedRegency]);
 
   useEffect(() => {
-    if (!selectedDistrict) {
-      setVillages([]);
-      return;
-    }
+    if (!selectedDistrict) return;
     fetchWilayah("village", selectedDistrict.slug).then((res) => {
       setVillages(res.entities);
     });
@@ -89,6 +77,30 @@ export function KelurahanSelector() {
     }
   };
 
+  const handleProvinceChange = (p: RegionEntity | null) => {
+    setSelectedProvince(p);
+    setSelectedRegency(null);
+    setSelectedDistrict(null);
+    setSelectedVillage(null);
+    setDistricts([]);
+    setVillages([]);
+    if (!p) setRegencies([]);
+  };
+
+  const handleRegencyChange = (r: RegionEntity | null) => {
+    setSelectedRegency(r);
+    setSelectedDistrict(null);
+    setSelectedVillage(null);
+    setVillages([]);
+    if (!r) setDistricts([]);
+  };
+
+  const handleDistrictChange = (d: RegionEntity | null) => {
+    setSelectedDistrict(d);
+    setSelectedVillage(null);
+    if (!d) setVillages([]);
+  };
+
   const useMyLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLocationError("Geolocation tidak didukung di perangkat ini.");
@@ -109,6 +121,9 @@ export function KelurahanSelector() {
         setSelectedProvince(null);
         setSelectedRegency(null);
         setSelectedDistrict(null);
+        setRegencies([]);
+        setDistricts([]);
+        setVillages([]);
         setSelectedVillage(entity);
         setSelectedKelurahan(entity);
         addBookmark({
@@ -152,26 +167,19 @@ export function KelurahanSelector() {
             label={LEVEL_LABELS.province}
             options={provinces}
             value={selectedProvince}
-            onChange={setSelectedProvince}
+            onChange={handleProvinceChange}
           />
           <Select
             label={LEVEL_LABELS.regency}
             options={regencies}
             value={selectedRegency}
-            onChange={(r) => {
-              setSelectedRegency(r);
-              setSelectedDistrict(null);
-              setSelectedVillage(null);
-            }}
+            onChange={handleRegencyChange}
           />
           <Select
             label={LEVEL_LABELS.district}
             options={districts}
             value={selectedDistrict}
-            onChange={(d) => {
-              setSelectedDistrict(d);
-              setSelectedVillage(null);
-            }}
+            onChange={handleDistrictChange}
           />
           <Select
             label={LEVEL_LABELS.village}

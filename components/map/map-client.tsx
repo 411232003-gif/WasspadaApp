@@ -197,15 +197,17 @@ export default function MapClient() {
 
   useEffect(() => {
     fetchWind(mapCenter[0], mapCenter[1])
-      .then(setWind)
+      .then((w) => {
+        setWind(w);
+        if (w) {
+          setDirection(toCardinal4(w.windDirectionTo));
+          setWindSpeed(
+            Math.min(100, Math.max(0, Math.round((w.windSpeed / 80) * 100)))
+          );
+        }
+      })
       .catch(() => setWind(null));
   }, [mapCenter[0], mapCenter[1]]);
-
-  useEffect(() => {
-    if (!wind) return;
-    setDirection(toCardinal4(wind.windDirectionTo));
-    setWindSpeed(Math.min(100, Math.max(0, Math.round((wind.windSpeed / 80) * 100))));
-  }, [wind]);
 
   useEffect(() => {
     const ts = nearestEarthquake?.item?.timestamp || null;
@@ -272,8 +274,8 @@ export default function MapClient() {
     }
   }, [tileProvider]);
 
-  const accent = theme === "maroon" ? "#d4af37" : "#06b6d4";
-  const accentSecondary = theme === "maroon" ? "#f59e0b" : "#3b82f6";
+  const accent = theme === "light" ? "#16a34a" : "#22c55e";
+  const accentSecondary = theme === "light" ? "#9333ea" : "#a855f7";
 
   const ashPolygon = useMemo(() => {
     const radius = 0.01 + (windSpeed / 100) * 0.07;

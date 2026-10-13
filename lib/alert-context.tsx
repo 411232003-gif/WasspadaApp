@@ -122,8 +122,11 @@ function getZone(distanceKm: number) {
 export function playEmergencySiren() {
   if (typeof window === "undefined") return;
   try {
-    const AudioCtx =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
+    const win = window as unknown as {
+      AudioContext?: typeof AudioContext;
+      webkitAudioContext?: typeof AudioContext;
+    };
+    const AudioCtx = win.AudioContext || win.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     if (ctx.state === "suspended") {
@@ -196,7 +199,19 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedKelurahan, setSelectedKelurahanState] =
-    useState<RegionEntity | null>(null);
+    useState<RegionEntity | null>(() => {
+      if (typeof window === "undefined") return null;
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as RegionEntity | null;
+          if (parsed?.lat != null && parsed?.lon != null) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+      return null;
+    });
   const [nearestVolcano, setNearestVolcano] =
     useState<Nearest<Volcano> | null>(null);
   const [nearestEarthquake, setNearestEarthquake] =
@@ -261,21 +276,6 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     : null;
   const kelurahanInDanger = kelurahanZone === "KRB III";
   const isInDangerZone = alertLevel === 4 || isInKrb3 || kelurahanInDanger;
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.lat != null && parsed?.lon != null) {
-          setSelectedKelurahanState(parsed);
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
 
   useEffect(() => {
     if (!didMount.current) {
