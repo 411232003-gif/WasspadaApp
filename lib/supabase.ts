@@ -119,6 +119,7 @@ export async function cleanupExpiredChatImages(): Promise<void> {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
+        prefix: "",
         limit: 1000,
         offset: 0,
         sortBy: { column: "created_at", order: "asc" },
