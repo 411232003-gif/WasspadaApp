@@ -19,6 +19,19 @@ service cloud.firestore {
                              && resource.data.userId == request.auth.uid;
     }
 
+    // Public community chat. Anyone can read; only authenticated users can
+    // post, and they must tag the message with their own uid.
+    match /community_messages/{doc} {
+      allow read: if true;
+      allow create: if isAuthenticated()
+                     && request.resource.data.userId == request.auth.uid
+                     && request.resource.data.text is string
+                     && request.resource.data.text.size() <= 500
+                     && request.resource.data.name is string
+                     && request.resource.data.name.size() <= 40;
+      allow update, delete: if false;
+    }
+
     // User-scoped bookmarks and subscriptions.
     match /users/{userId} {
       match /kelurahan_bookmarks/{doc} {

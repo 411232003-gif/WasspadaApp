@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Map, Box, TriangleAlert } from "lucide-react";
+import { LayoutDashboard, Map, Box, TriangleAlert, MessageCircle } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/live-map", label: "Live Map", icon: Map },
   { href: "/3d-hazard", label: "3D Hazard Zone", icon: Box },
   { href: "/alert-center", label: "Alert Center", icon: TriangleAlert },
+  { href: "/chat", label: "Chat Publik", icon: MessageCircle },
 ];
 
 export function Sidebar() {

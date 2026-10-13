@@ -48,14 +48,6 @@ const DIRECTION_DEGREES: Record<Direction, number> = {
 
 const DIRECTIONS: Direction[] = ["N", "S", "E", "W"];
 
-const MOCK_GUNUNG_ROMANTIS = "/gunung-romantis.jpeg";
-const MOCK_GUNUNG_SUPER_AKTIF = "/gunung-super-aktif.jpeg";
-const MOCK_GUNUNG_BOQO = "/gunung-boqo.jpeg";
-// Koordinat perkiraan dari OpenStreetMap / pencarian web
-const MOCK_GUNUNG_ROMANTIS_COORDS: [number, number] = [-6.1853385, 106.7039619]; // Green Lake City Boulevard, Tangerang (dekat Cluster Amerika)
-const MOCK_GUNUNG_SUPER_AKTIF_COORDS: [number, number] = [-6.1795803, 106.8070524]; // Jalan Semangka II, Jati Pulo, Tomang
-const MOCK_GUNUNG_BOQO_COORDS: [number, number] = [-5.78333, 105.625]; // sekitar Gunung Rajabasa, Lampung
-
 function toCardinal4(deg: number): Direction {
   const d = ((deg % 360) + 360) % 360;
   if (d >= 45 && d < 135) return "E";
@@ -93,18 +85,6 @@ function getAshLabelIcon(text: string) {
     html: `<div class="whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-[10px] text-white backdrop-blur-sm" style="border:1px solid rgba(255,255,255,0.2);">${text}</div>`,
     iconSize: [80, 24],
     iconAnchor: [40, 12],
-  });
-}
-
-function getImageIcon(url: string, active = false) {
-  const ring = active
-    ? `<div style="position:absolute;inset:-4px;border-radius:9999px;border:3px solid #ef4444;box-shadow:0 0 18px #ef4444;"></div>`
-    : "";
-  return L.divIcon({
-    className: "bg-transparent",
-    html: `<div style="position:relative;width:48px;height:48px;">${ring}<img src="${url}" alt="gunung" style="width:48px;height:48px;border-radius:9999px;object-fit:cover;border:2px solid #fff;box-shadow:0 0 12px rgba(0,0,0,0.5);" /></div>`,
-    iconSize: [48, 48],
-    iconAnchor: [24, 24],
   });
 }
 
@@ -177,9 +157,11 @@ export default function MapClient() {
   const lastTsRef = useRef<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       try {
         const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
+        if (cancelled) return;
         setVolcanoes((vRes.error ? [] : vRes.volcanoes) || []);
         const rawEqs = bRes.error
           ? []
@@ -195,10 +177,15 @@ export default function MapClient() {
         });
         setEarthquakes(eqs);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     load();
+    const interval = setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
 
@@ -350,52 +337,6 @@ export default function MapClient() {
       });
   }, [volcanoes]);
 
-  const mockVolcanoMarkers = useMemo(() => {
-    return [
-      {
-        key: "mock-romantis",
-        name: "Gunung Romantis",
-        position: MOCK_GUNUNG_ROMANTIS_COORDS,
-        image: MOCK_GUNUNG_ROMANTIS,
-        active: false,
-        status: "Mock - Level 10 Romantis",
-      },
-      {
-        key: "mock-super",
-        name: "Gunung Super Aktif Level 10",
-        position: MOCK_GUNUNG_SUPER_AKTIF_COORDS,
-        image: MOCK_GUNUNG_SUPER_AKTIF,
-        active: true,
-        status: "Mock - Level 10 Super Aktif",
-      },
-      {
-        key: "mock-boqo",
-        name: "Gunung {BOQO bowo qodri}",
-        position: MOCK_GUNUNG_BOQO_COORDS,
-        image: MOCK_GUNUNG_BOQO,
-        active: true,
-        status: "Mock - Level 9 Aktif",
-      },
-    ].map((v) => (
-      <Marker
-        key={v.key}
-        position={v.position}
-        icon={getImageIcon(v.image, v.active)}
-        zIndexOffset={1000}
-      >
-        <Popup>
-          <div className="text-bg max-w-[180px]">
-            <strong>{v.name}</strong>
-            <br />
-            <span className="text-fg-muted">{v.status}</span>
-            <br />
-            <span className="text-[10px] text-fg/60">Data bohongan / lucu-lucuan saja</span>
-          </div>
-        </Popup>
-      </Marker>
-    ));
-  }, []);
-
   const earthquakeMarkers = useMemo(() => {
     return (earthquakes || []).map((e, i) => {
       const level = levelFromEarthquake(e.magnitude || 0);
@@ -457,8 +398,6 @@ export default function MapClient() {
             {volcanoMarkers}
           </MarkerClusterGroup>
         )}
-
-        {mockVolcanoMarkers}
 
         {layers.earthquake && earthquakeMarkers.length > 0 && (
           <MarkerClusterGroup

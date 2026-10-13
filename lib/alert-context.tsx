@@ -104,6 +104,10 @@ interface AlertContextValue {
   nearestEarthquake: Nearest<Earthquake> | null;
   kelurahanZone: string | null;
   kelurahanInDanger: boolean;
+  volcanoes: Volcano[];
+  earthquakes: Earthquake[];
+  latestEarthquake: Earthquake | null;
+  dataUpdatedAt: string | null;
 }
 
 const AlertContext = createContext<AlertContextValue | undefined>(undefined);
@@ -115,7 +119,7 @@ function getZone(distanceKm: number) {
   return "Di Luar KRB";
 }
 
-function playEmergencySiren() {
+export function playEmergencySiren() {
   if (typeof window === "undefined") return;
   try {
     const AudioCtx =
@@ -197,6 +201,12 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     useState<Nearest<Volcano> | null>(null);
   const [nearestEarthquake, setNearestEarthquake] =
     useState<Nearest<Earthquake> | null>(null);
+  const [volcanoes, setVolcanoes] = useState<Volcano[]>([]);
+  const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
+  const [latestEarthquake, setLatestEarthquake] = useState<Earthquake | null>(
+    null
+  );
+  const [dataUpdatedAt, setDataUpdatedAt] = useState<string | null>(null);
   const didMount = useRef(false);
 
   const disasterCenter: [number, number] = selectedKelurahan
@@ -288,24 +298,33 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
 
-        const volcanoes = (volcanoRes.error ? [] : volcanoRes.volcanoes) || [];
-        const earthquakes = bmkgRes.error
+        const volcanoList = (volcanoRes.error ? [] : volcanoRes.volcanoes) || [];
+        const earthquakeList = bmkgRes.error
           ? bmkgRes.felt || []
           : [bmkgRes.latest, ...(bmkgRes.felt || [])].filter(
               (e): e is Earthquake => e != null && e.coordinates != null
             );
 
         const center = disasterCenter;
-        const v = getNearestVolcano(center, volcanoes);
-        const e = getNearestEarthquake(center, earthquakes);
+        const v = getNearestVolcano(center, volcanoList);
+        const e = getNearestEarthquake(center, earthquakeList);
 
+        setVolcanoes(volcanoList);
+        setEarthquakes(earthquakeList);
+        setLatestEarthquake(bmkgRes.error ? null : bmkgRes.latest);
+        setDataUpdatedAt(new Date().toISOString());
         setNearestVolcano(v);
         setNearestEarthquake(e);
 
-        const maxVolcanoLevel = volcanoes.reduce((m, vol) => Math.max(m, vol.level), 1);
+        const maxVolcanoLevel = volcanoList.reduce(
+          (m, vol) => Math.max(m, vol.level),
+          1
+        );
         const eqLevel = e ? levelFromEarthquake(e.item.magnitude || 0) : 1;
         const kelurahanLevel = v ? v.item.level : 1;
-        setAlertLevelState(Math.max(maxVolcanoLevel, eqLevel, kelurahanLevel) as AlertLevel);
+        setAlertLevelState(
+          Math.max(maxVolcanoLevel, eqLevel, kelurahanLevel) as AlertLevel
+        );
       } catch {
         // ignore
       }
@@ -341,6 +360,10 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         nearestEarthquake,
         kelurahanZone,
         kelurahanInDanger,
+        volcanoes,
+        earthquakes,
+        latestEarthquake,
+        dataUpdatedAt,
       }}
     >
       {children}

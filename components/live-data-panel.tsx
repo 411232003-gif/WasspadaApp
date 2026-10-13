@@ -65,33 +65,45 @@ export function LiveDataPanel() {
     const eq = bmkg.latest;
     const magnitude = eq.magnitude;
     if (magnitude === null) return;
-    const level = levelFromEarthquake(magnitude);
-    await pushAlert({
-      type: "earthquake",
-      title: `Gempa BMKG M ${magnitude}`,
-      description: eq.location || "Gempa terkini",
-      level,
-      magnitude,
-      depth: eq.depthKm ?? undefined,
-      location: eq.location ?? undefined,
-      tsunamiPotential: eq.potential ?? undefined,
-    });
-    setLogStatus("Gempa tercatat di Firestore");
+    try {
+      const level = levelFromEarthquake(magnitude);
+      await pushAlert({
+        type: "earthquake",
+        title: `Gempa BMKG M ${magnitude}`,
+        description: eq.location || "Gempa terkini",
+        level,
+        magnitude,
+        depth: eq.depthKm ?? undefined,
+        location: eq.location ?? undefined,
+        tsunamiPotential: eq.potential ?? undefined,
+      });
+      setLogStatus("Gempa tercatat di Firestore");
+    } catch (e) {
+      setLogStatus(
+        e instanceof Error ? e.message : "Gagal mencatat ke Firestore"
+      );
+    }
     setTimeout(() => setLogStatus(null), 3000);
   };
 
   const logHighAlertVolcanoes = async () => {
     if (highAlert.length === 0) return;
-    for (const v of highAlert) {
-      await pushAlert({
-        type: "volcano",
-        title: `${v.name} - ${v.status}`,
-        description: `Status PVMBG gunung ${v.name} saat ini ${v.status}.`,
-        level: v.level,
-        volcanoStatus: v.status,
-      });
+    try {
+      for (const v of highAlert) {
+        await pushAlert({
+          type: "volcano",
+          title: `${v.name} - ${v.status}`,
+          description: `Status PVMBG gunung ${v.name} saat ini ${v.status}.`,
+          level: v.level,
+          volcanoStatus: v.status,
+        });
+      }
+      setLogStatus(`${highAlert.length} status gunung tercatat di Firestore`);
+    } catch (e) {
+      setLogStatus(
+        e instanceof Error ? e.message : "Gagal mencatat ke Firestore"
+      );
     }
-    setLogStatus(`${highAlert.length} status gunung tercatat di Firestore`);
     setTimeout(() => setLogStatus(null), 3000);
   };
 

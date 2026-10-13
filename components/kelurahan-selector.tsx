@@ -84,7 +84,7 @@ export function KelurahanSelector() {
         lat: v.lat,
         lon: v.lon,
         note: `${v.name_local} - ${v.parent_name_local || ""}`,
-      });
+      }).catch(() => {});
       setOpen(false);
     }
   };
@@ -116,7 +116,7 @@ export function KelurahanSelector() {
           lat: entity.lat,
           lon: entity.lon,
           note: "Lokasi dari GPS perangkat",
-        });
+        }).catch(() => {});
         setLocating(false);
         setOpen(false);
       },
