@@ -24,7 +24,7 @@ const PARENT_ENDPOINT: Record<Level, string> = {
   village: "district",
 };
 
-function normalizeEntity(e: any): RegionEntity | null {
+function normalizeEntity(e: Record<string, unknown>): RegionEntity | null {
   if (!e || !e.id || !e.name_local) return null;
   return {
     id: String(e.id),
@@ -51,15 +51,15 @@ export async function GET(request: Request) {
   try {
     const res = await fetch(url, { next: { revalidate: 86400 } });
     if (!res.ok) {
-      const text = await res.text();
+      console.error("OpenAdminData error:", res.status);
       return NextResponse.json(
-        { error: `OpenAdminData ${res.status}: ${text}`, entities: [] },
+        { error: "Sumber data wilayah sedang tidak tersedia.", entities: [] },
         { status: res.status < 500 ? res.status : 502 }
       );
     }
     const data = await res.json();
 
-    let rawList: any[] = [];
+    let rawList: Record<string, unknown>[] = [];
     if (data.children && Array.isArray(data.children.entities)) {
       rawList = data.children.entities;
     } else if (data.entities && Array.isArray(data.entities)) {
@@ -73,9 +73,10 @@ export async function GET(request: Request) {
       count: list.length,
       entities: list,
     });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("Wilayah fetch failed:", error);
     return NextResponse.json(
-      { error: error.message || "Gagal memuat data wilayah", entities: [] },
+      { error: "Gagal memuat data wilayah.", entities: [] },
       { status: 502 }
     );
   }

@@ -213,10 +213,12 @@ export function CommunityChat() {
 
   useEffect(() => {
     (async () => {
-      const saved = localStorage.getItem(NAME_KEY);
-      const resolved = saved || defaultName();
-      localStorage.setItem(NAME_KEY, resolved);
       const u = await ensureUser();
+      const saved = localStorage.getItem(NAME_KEY);
+      const accountName =
+        u && !u.isAnonymous ? (u.displayName ?? u.email ?? null) : null;
+      const resolved = accountName || saved || defaultName();
+      localStorage.setItem(NAME_KEY, resolved);
       setName(resolved);
       setUid(u?.uid ?? null);
     })();

@@ -75,10 +75,11 @@ export async function GET() {
       felt: feltList,
       updatedAt: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("BMKG fetch failed:", error);
     return NextResponse.json(
       {
-        error: error.message || "Gagal mengambil data BMKG",
+        error: "Gagal mengambil data BMKG.",
         latest: null,
         felt: [],
         updatedAt: new Date().toISOString(),

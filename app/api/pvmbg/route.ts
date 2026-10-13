@@ -73,10 +73,11 @@ export async function GET() {
       volcanoes,
       updatedAt: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error) {
+    console.error("PVMBG fetch failed:", error);
     return NextResponse.json(
       {
-        error: error.message || "Gagal mengambil data PVMBG",
+        error: "Gagal mengambil data PVMBG.",
         volcanoes: [],
         updatedAt: new Date().toISOString(),
       },
