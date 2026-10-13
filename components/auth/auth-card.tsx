@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, User } from "lucide-react";
+import { Camera, Lock, Mail, Plus, User } from "lucide-react";
 import {
   isFirebaseConfigured,
   loginWithEmail,
@@ -10,6 +10,13 @@ import {
   resetPassword,
   useAuthUser,
 } from "@/lib/auth";
+import {
+  CaptchaBox,
+  CaptchaHandle,
+  isCaptchaConfigured,
+  verifyCaptcha,
+} from "@/components/auth/captcha-box";
+import { isSupabaseConfigured, uploadChatImage } from "@/lib/supabase";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,15 +35,52 @@ export function AuthCard() {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPass, setRegPass] = useState("");
+  const [regPhoto, setRegPhoto] = useState<File | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const loginCaptchaRef = useRef<CaptchaHandle>(null);
+  const regCaptchaRef = useRef<CaptchaHandle>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const photoPreview = useMemo(
+    () => (regPhoto ? URL.createObjectURL(regPhoto) : null),
+    [regPhoto]
+  );
+  useEffect(() => {
+    return () => {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+    };
+  }, [photoPreview]);
 
   useEffect(() => {
     if (!authLoading && user) router.replace("/");
   }, [authLoading, user, router]);
 
+  const resetCaptchas = () => {
+    loginCaptchaRef.current?.reset();
+    regCaptchaRef.current?.reset();
+    setCaptchaToken(null);
+  };
+
   const flipTo = (signup: boolean) => {
     setFlipped(signup);
     setError(null);
     setNotice(null);
+    resetCaptchas();
+  };
+
+  const ensureCaptcha = async (): Promise<boolean> => {
+    if (!isCaptchaConfigured) return true;
+    if (!captchaToken) {
+      setError("Selesaikan verifikasi captcha dulu.");
+      return false;
+    }
+    const ok = await verifyCaptcha(captchaToken);
+    if (!ok) {
+      setError("Verifikasi captcha gagal. Coba lagi.");
+      resetCaptchas();
+      return false;
+    }
+    return true;
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -54,10 +98,12 @@ export function AuthCard() {
     setError(null);
     setNotice(null);
     try {
+      if (!(await ensureCaptcha())) return;
       await loginWithEmail(loginEmail, loginPass, remember);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login gagal.");
+      resetCaptchas();
     } finally {
       setBusy(false);
     }
@@ -82,10 +128,16 @@ export function AuthCard() {
     setError(null);
     setNotice(null);
     try {
-      await registerWithEmail(regName, regEmail, regPass);
+      if (!(await ensureCaptcha())) return;
+      let photoURL: string | undefined;
+      if (regPhoto && isSupabaseConfigured()) {
+        photoURL = await uploadChatImage(regPhoto);
+      }
+      await registerWithEmail(regName, regEmail, regPass, photoURL);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Pendaftaran gagal.");
+      resetCaptchas();
     } finally {
       setBusy(false);
     }
@@ -165,6 +217,8 @@ export function AuthCard() {
                 </button>
               </div>
 
+              <CaptchaBox ref={loginCaptchaRef} onChange={setCaptchaToken} />
+
               <button type="submit" className="submit" disabled={busy}>
                 {busy ? "Memproses..." : "Masuk"}
               </button>
@@ -186,6 +240,35 @@ export function AuthCard() {
 
               {error && flipped && <div className="form-msg error">{error}</div>}
               {notice && flipped && <div className="form-msg ok">{notice}</div>}
+
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  setRegPhoto(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                className="photo-pick"
+                onClick={() => photoInputRef.current?.click()}
+                aria-label="Pilih foto profil"
+                title="Foto profil (opsional)"
+              >
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Foto profil" />
+                ) : (
+                  <span className="ph-icon">
+                    <Camera size={22} />
+                  </span>
+                )}
+                <span className="ph-badge">
+                  <Plus size={12} />
+                </span>
+              </button>
 
               <div className="input-box">
                 <User className="in-icon" />
@@ -213,7 +296,7 @@ export function AuthCard() {
                 />
               </div>
 
-              <div className="input-box" style={{ marginBottom: 30 }}>
+              <div className="input-box" style={{ marginBottom: 22 }}>
                 <Lock className="in-icon" />
                 <input
                   type="password"
@@ -225,6 +308,8 @@ export function AuthCard() {
                   required
                 />
               </div>
+
+              <CaptchaBox ref={regCaptchaRef} onChange={setCaptchaToken} />
 
               <button type="submit" className="submit" disabled={busy}>
                 {busy ? "Memproses..." : "Buat Akun"}

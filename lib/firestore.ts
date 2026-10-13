@@ -67,6 +67,7 @@ export interface ChatMessageDoc {
   name: string;
   userId: string;
   imageUrl?: string;
+  photoUrl?: string;
   likes?: string[];
   parentId?: string;
   parentName?: string;
@@ -76,6 +77,7 @@ export interface ChatMessageDoc {
 
 export interface ChatMessageOptions {
   imageUrl?: string;
+  photoUrl?: string;
   parentId?: string;
   parentName?: string;
   parentText?: string;
@@ -263,6 +265,7 @@ export async function sendChatMessage(
     userId: user.uid,
     likes: [],
     ...(options?.imageUrl ? { imageUrl: options.imageUrl } : {}),
+    ...(options?.photoUrl ? { photoUrl: options.photoUrl } : {}),
     ...(options?.parentId ? { parentId: options.parentId } : {}),
     ...(options?.parentName ? { parentName: options.parentName } : {}),
     ...(options?.parentText ? { parentText: options.parentText } : {}),

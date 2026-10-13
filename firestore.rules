@@ -9,6 +9,13 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Registered accounts only (email/password, Google, ...). Anonymous
+    // sign-in does not count — guests cannot write.
+    function isMember() {
+      return isAuthenticated()
+             && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     // Public alert feed. Anyone can read; only authenticated users can post,
     // and they must tag the alert with their own uid.
     match /disaster_alerts/{doc} {
@@ -19,13 +26,11 @@ service cloud.firestore {
                              && resource.data.userId == request.auth.uid;
     }
 
-    // Public community chat. Anyone can read; only authenticated users can
-    // post, and they must tag the message with their own uid. Users may only
-    // update the likes list (like/unlike). Replies & photo URLs are fields on
-    // the message document.
+    // Public community chat. Only registered (non-anonymous) members can
+    // post and like. Messages must be tagged with the sender's own uid.
     match /community_messages/{doc} {
-      allow read: if true;
-      allow create: if isAuthenticated()
+      allow read: if isMember();
+      allow create: if isMember()
                      && request.resource.data.userId == request.auth.uid
                      && request.resource.data.text is string
                      && request.resource.data.text.size() <= 500
@@ -34,9 +39,11 @@ service cloud.firestore {
                      && request.resource.data.likes is list
                      && (!('imageUrl' in request.resource.data)
                          || request.resource.data.imageUrl is string)
+                     && (!('photoUrl' in request.resource.data)
+                         || request.resource.data.photoUrl is string)
                      && (!('parentId' in request.resource.data)
                          || request.resource.data.parentId is string);
-      allow update: if isAuthenticated()
+      allow update: if isMember()
                      && request.resource.data.diff(resource.data)
                           .affectedKeys().hasOnly(['likes'])
                      && request.resource.data.likes is list;

@@ -19,6 +19,7 @@ export interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null;
+  photoURL: string | null;
   isAnonymous: boolean;
 }
 
@@ -43,6 +44,7 @@ function toAuthUser(user: User | null): AuthUser | null {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
+    photoURL: user.photoURL,
     isAnonymous: user.isAnonymous,
   };
 }
@@ -90,7 +92,8 @@ export async function loginWithEmail(
 export async function registerWithEmail(
   name: string,
   email: string,
-  password: string
+  password: string,
+  photoURL?: string
 ): Promise<void> {
   if (!auth) throw new Error("Firebase belum dikonfigurasi.");
   try {
@@ -99,7 +102,10 @@ export async function registerWithEmail(
       email.trim(),
       password
     );
-    await updateProfile(cred.user, { displayName: name.trim().slice(0, 40) });
+    await updateProfile(cred.user, {
+      displayName: name.trim().slice(0, 40),
+      ...(photoURL ? { photoURL } : {}),
+    });
   } catch (e) {
     throw new Error(friendlyError((e as { code?: string }).code ?? ""));
   }

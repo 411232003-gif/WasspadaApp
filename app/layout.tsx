@@ -7,6 +7,7 @@ import { Header } from "@/components/header";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { IdleTimeout } from "@/components/idle-timeout";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -62,6 +63,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <ThemeProvider>
           <AlertProvider>
+            <IdleTimeout />
             <Header />
             <div className="relative flex flex-1">
               <Sidebar />

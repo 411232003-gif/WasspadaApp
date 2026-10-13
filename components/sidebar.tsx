@@ -47,6 +47,13 @@ export function Sidebar() {
     .charAt(0)
     .toUpperCase();
   const displayName = user?.displayName || user?.email || "Tamu";
+  const avatar = user?.photoURL ? (
+    <span className="gs-avatar gs-avatar-photo">
+      <img src={user.photoURL} alt={displayName} />
+    </span>
+  ) : (
+    <span className="gs-avatar">{initial}</span>
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -113,7 +120,7 @@ export function Sidebar() {
           aria-label={displayName}
           data-tip={user ? displayName : "Masuk"}
         >
-          <span className="gs-avatar">{initial}</span>
+          {avatar}
         </Link>
       </aside>
 
@@ -177,7 +184,7 @@ export function Sidebar() {
         </ul>
 
         <Link href="/login" className="gs-account">
-          <span className="gs-avatar">{initial}</span>
+          {avatar}
           <span className="gs-account-text">
             <strong>{displayName}</strong>
             <small>{user ? "Akun terdaftar" : "Pengguna anonim"}</small>

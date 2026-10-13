@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Heart,
   ImageOff,
   ImagePlus,
   Loader2,
+  Lock,
+  LogIn,
   MessageCircle,
   Send,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
+import { useAuthUser } from "@/lib/auth";
 import {
   sendChatMessage,
   subscribeChatMessages,
@@ -19,7 +24,6 @@ import {
   getFirebaseStatus,
   ChatMessageDoc,
 } from "@/lib/firestore";
-import { ensureUser } from "@/lib/firebase";
 import {
   cleanupExpiredChatImages,
   isSupabaseConfigured,
@@ -195,12 +199,32 @@ function Composer({
   );
 }
 
+function ChatAvatar({ src, name }: { src?: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        onError={() => setFailed(true)}
+        className="h-6 w-6 shrink-0 rounded-full border border-card-border object-cover"
+      />
+    );
+  }
+  return (
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/20 text-[10px] font-bold text-accent">
+      {(name || "?").slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 export function CommunityChat() {
+  const router = useRouter();
+  const { user: account, loading: authLoading } = useAuthUser();
   const [messages, setMessages] = useState<ChatMessageDoc[]>([]);
   const [text, setText] = useState("");
   const [image, setImage] = useState<File | null>(null);
-  const [name, setName] = useState("");
-  const [uid, setUid] = useState<string | null>(null);
+  const [nameOverride, setNameOverride] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openThread, setOpenThread] = useState<string | null>(null);
@@ -211,20 +235,18 @@ export function CommunityChat() {
   const configured = getFirebaseStatus().configured;
   const supabaseReady = isSupabaseConfigured();
 
+  const uid = account?.uid ?? null;
+  const name =
+    nameOverride ??
+    account?.displayName ??
+    account?.email ??
+    "Anonim";
+
   useEffect(() => {
-    (async () => {
-      const u = await ensureUser();
-      const saved = localStorage.getItem(NAME_KEY);
-      const accountName =
-        u && !u.isAnonymous ? (u.displayName ?? u.email ?? null) : null;
-      const resolved = accountName || saved || defaultName();
-      localStorage.setItem(NAME_KEY, resolved);
-      setName(resolved);
-      setUid(u?.uid ?? null);
-    })();
+    if (!account) return;
     cleanupExpiredChatImages().catch(() => {});
     return subscribeChatMessages(setMessages);
-  }, []);
+  }, [account]);
 
   const topLevel = useMemo(
     () => messages.filter((m) => !m.parentId),
@@ -251,7 +273,7 @@ export function CommunityChat() {
   }, [topLevel.length]);
 
   const updateName = (value: string) => {
-    setName(value);
+    setNameOverride(value);
     localStorage.setItem(NAME_KEY, value || defaultName());
   };
 
@@ -262,7 +284,10 @@ export function CommunityChat() {
     setError(null);
     try {
       const imageUrl = image ? await uploadChatImage(image) : undefined;
-      await sendChatMessage(trimmed, name.trim() || "Anonim", { imageUrl });
+      await sendChatMessage(trimmed, name.trim() || "Anonim", {
+        imageUrl,
+        photoUrl: account?.photoURL ?? undefined,
+      });
       setText("");
       setImage(null);
     } catch (e) {
@@ -283,6 +308,7 @@ export function CommunityChat() {
         : undefined;
       await sendChatMessage(trimmed, name.trim() || "Anonim", {
         imageUrl,
+        photoUrl: account?.photoURL ?? undefined,
         parentId: parent.id,
         parentName: parent.name,
         parentText: parent.text.slice(0, 80),
@@ -332,10 +358,11 @@ export function CommunityChat() {
           }
         >
           <p
-            className={`text-[10px] font-bold ${
+            className={`flex items-center gap-1.5 text-[10px] font-bold ${
               own ? "text-accent" : "text-fg-muted"
             }`}
           >
+            <ChatAvatar src={msg.photoUrl} name={msg.name} />
             {own ? "Kamu" : msg.name || "Anonim"}
           </p>
           {msg.parentName && !isReply && (
@@ -407,6 +434,51 @@ export function CommunityChat() {
       </div>
     );
   };
+
+  if (authLoading) {
+    return (
+      <GlassCard className="flex h-[60vh] md:h-[calc(100vh-11rem)] min-h-[420px] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-accent" />
+      </GlassCard>
+    );
+  }
+
+  if (!account) {
+    return (
+      <GlassCard className="flex h-[60vh] md:h-[calc(100vh-11rem)] min-h-[420px] flex-col items-center justify-center gap-4 p-8 text-center">
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 text-accent shadow-[0_8px_20px_var(--glow)]">
+          <Lock className="h-7 w-7" />
+        </span>
+        <div>
+          <h3 className="text-base font-bold text-fg">
+            Chat Publik Khusus Anggota
+          </h3>
+          <p className="mt-1.5 max-w-sm text-sm text-fg-muted">
+            Masuk atau daftar akun terlebih dahulu untuk membaca dan mengirim
+            pesan di chat publik.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            className="flex items-center gap-2 rounded-xl bg-accent/15 px-4 py-2.5 text-sm font-bold text-accent hover:bg-accent/25"
+          >
+            <LogIn className="h-4 w-4" />
+            Masuk
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            className="flex items-center gap-2 rounded-xl border border-card-border bg-white/5 px-4 py-2.5 text-sm font-bold text-fg hover:bg-white/10"
+          >
+            <UserPlus className="h-4 w-4" />
+            Daftar Akun
+          </button>
+        </div>
+      </GlassCard>
+    );
+  }
 
   return (
     <GlassCard className="flex h-[60vh] md:h-[calc(100vh-11rem)] min-h-[420px] flex-col overflow-hidden">
