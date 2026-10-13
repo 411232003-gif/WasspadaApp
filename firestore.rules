@@ -20,7 +20,9 @@ service cloud.firestore {
     }
 
     // Public community chat. Anyone can read; only authenticated users can
-    // post, and they must tag the message with their own uid.
+    // post, and they must tag the message with their own uid. Users may only
+    // update the likes list (like/unlike). Replies & photo URLs are fields on
+    // the message document.
     match /community_messages/{doc} {
       allow read: if true;
       allow create: if isAuthenticated()
@@ -28,8 +30,17 @@ service cloud.firestore {
                      && request.resource.data.text is string
                      && request.resource.data.text.size() <= 500
                      && request.resource.data.name is string
-                     && request.resource.data.name.size() <= 40;
-      allow update, delete: if false;
+                     && request.resource.data.name.size() <= 40
+                     && request.resource.data.likes is list
+                     && (!('imageUrl' in request.resource.data)
+                         || request.resource.data.imageUrl is string)
+                     && (!('parentId' in request.resource.data)
+                         || request.resource.data.parentId is string);
+      allow update: if isAuthenticated()
+                     && request.resource.data.diff(resource.data)
+                          .affectedKeys().hasOnly(['likes'])
+                     && request.resource.data.likes is list;
+      allow delete: if false;
     }
 
     // User-scoped bookmarks and subscriptions.

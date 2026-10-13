@@ -113,6 +113,46 @@ export async function fetchWilayah(
   }
 }
 
+export interface NewsItem {
+  id: string;
+  source: "petabencana" | "bluesky" | "gdacs" | "reliefweb";
+  title: string;
+  text: string;
+  url: string;
+  imageUrl?: string;
+  author?: string;
+  createdAt: string;
+  meta?: string;
+}
+
+export interface NewsSourceStatus {
+  ok: boolean;
+  count: number;
+  error?: string;
+}
+
+export interface NewsResponse {
+  items: NewsItem[];
+  sources: Record<string, NewsSourceStatus>;
+  updatedAt: string;
+  error?: string;
+}
+
+export async function fetchNews(): Promise<NewsResponse> {
+  try {
+    const res = await fetch("/api/news");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    return {
+      items: [],
+      sources: {},
+      updatedAt: new Date().toISOString(),
+      error: e instanceof Error ? e.message : "Gagal memuat berita",
+    };
+  }
+}
+
 export function findTargetVolcano(
   volcanoes: Volcano[],
   targetName: string

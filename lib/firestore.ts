@@ -2,6 +2,8 @@
 
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -10,6 +12,7 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  updateDoc,
   Timestamp,
 } from "firebase/firestore";
 import { db, ensureUser, isFirebaseConfigured } from "./firebase";
@@ -63,7 +66,19 @@ export interface ChatMessageDoc {
   text: string;
   name: string;
   userId: string;
+  imageUrl?: string;
+  likes?: string[];
+  parentId?: string;
+  parentName?: string;
+  parentText?: string;
   createdAt: Timestamp | number | null;
+}
+
+export interface ChatMessageOptions {
+  imageUrl?: string;
+  parentId?: string;
+  parentName?: string;
+  parentText?: string;
 }
 
 type ChatCallback = (messages: ChatMessageDoc[]) => void;
@@ -235,7 +250,8 @@ export function subscribeSubscriptions(
 
 export async function sendChatMessage(
   text: string,
-  name: string
+  name: string,
+  options?: ChatMessageOptions
 ): Promise<string> {
   const user = await ensureUser();
   const firestore = requireDb();
@@ -245,9 +261,26 @@ export async function sendChatMessage(
     text: text.slice(0, 500),
     name: name.slice(0, 40),
     userId: user.uid,
+    likes: [],
+    ...(options?.imageUrl ? { imageUrl: options.imageUrl } : {}),
+    ...(options?.parentId ? { parentId: options.parentId } : {}),
+    ...(options?.parentName ? { parentName: options.parentName } : {}),
+    ...(options?.parentText ? { parentText: options.parentText } : {}),
     createdAt: serverTimestamp(),
   });
   return docRef.id;
+}
+
+export async function toggleChatLike(
+  messageId: string,
+  likes: string[],
+  userId: string
+): Promise<void> {
+  const firestore = requireDb();
+  const liked = likes.includes(userId);
+  await updateDoc(doc(firestore, COLLECTION_MESSAGES, messageId), {
+    likes: liked ? arrayRemove(userId) : arrayUnion(userId),
+  });
 }
 
 export function subscribeChatMessages(callback: ChatCallback): () => void {
