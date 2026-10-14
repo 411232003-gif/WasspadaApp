@@ -27,6 +27,7 @@ declare global {
   interface Window {
     grecaptcha?: Grecaptcha;
     onWasspadaCaptchaLoad?: () => void;
+    __wspCaptchaRenders?: Set<() => void>;
   }
 }
 
@@ -73,7 +74,15 @@ export function CaptchaBox({
       render();
       return;
     }
-    window.onWasspadaCaptchaLoad = render;
+
+    // Beberapa CaptchaBox bisa mount bersamaan (kartu login & daftar).
+    // Daftarkan semua render ke satu onload global.
+    window.__wspCaptchaRenders ??= new Set();
+    window.__wspCaptchaRenders.add(render);
+    window.onWasspadaCaptchaLoad = () => {
+      window.__wspCaptchaRenders?.forEach((r) => r());
+    };
+
     if (!document.getElementById("recaptcha-api")) {
       const s = document.createElement("script");
       s.id = "recaptcha-api";
@@ -83,6 +92,10 @@ export function CaptchaBox({
       s.defer = true;
       document.head.appendChild(s);
     }
+
+    return () => {
+      window.__wspCaptchaRenders?.delete(render);
+    };
   }, []);
 
   if (!isCaptchaConfigured) return null;

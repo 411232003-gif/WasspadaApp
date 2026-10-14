@@ -15,6 +15,7 @@ import {
   Newspaper,
   ShieldAlert,
   TriangleAlert,
+  UserCircle2,
 } from "lucide-react";
 import { logout, useAuthUser } from "@/lib/auth";
 
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/alert-center", label: "Alert Center", icon: TriangleAlert },
   { href: "/news", label: "Berita", icon: Newspaper },
   { href: "/chat", label: "Chat Publik", icon: MessageCircle },
+  { href: "/profil", label: "Profil", icon: UserCircle2 },
 ];
 
 function WindowDots({ big = false }: { big?: boolean }) {
@@ -115,10 +117,10 @@ export function Sidebar() {
         </ul>
 
         <Link
-          href="/login"
+          href={user ? "/profil" : "/login"}
           className="gs-profile"
           aria-label={displayName}
-          data-tip={user ? displayName : "Masuk"}
+          data-tip={user ? `${displayName} — Profil` : "Masuk"}
         >
           {avatar}
         </Link>
@@ -183,7 +185,7 @@ export function Sidebar() {
           </li>
         </ul>
 
-        <Link href="/login" className="gs-account">
+        <Link href={user ? "/profil" : "/login"} className="gs-account">
           {avatar}
           <span className="gs-account-text">
             <strong>{displayName}</strong>

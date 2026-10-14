@@ -7,13 +7,18 @@ export function ThemeSwitcher() {
   const isDark = theme === "dark";
 
   return (
-    <span className="t3d" title={isDark ? "Mode gelap aktif" : "Mode terang aktif"}>
+    <span
+      className="t3d"
+      title={isDark ? "Mode gelap aktif" : "Mode terang aktif"}
+      suppressHydrationWarning
+    >
       <label className="t3d-switch" aria-label="Ganti tema gelap/terang">
         <input
           type="checkbox"
           checked={isDark}
           onChange={toggleTheme}
           aria-checked={isDark}
+          suppressHydrationWarning
         />
         <span className="t3d-btn">
           <span className="t3d-light" />

@@ -50,6 +50,13 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // User profiles (display name, birth date, photo). Members can read
+    // any profile (needed for chat avatars); only the owner can write.
+    match /profiles/{userId} {
+      allow read: if isMember();
+      allow write: if isMember() && request.auth.uid == userId;
+    }
+
     // User-scoped bookmarks and subscriptions.
     match /users/{userId} {
       match /kelurahan_bookmarks/{doc} {

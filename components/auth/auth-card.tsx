@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Lock, Mail, Plus, User } from "lucide-react";
+import { Lock, Mail, User } from "lucide-react";
 import {
   isFirebaseConfigured,
   loginWithEmail,
@@ -16,7 +16,6 @@ import {
   isCaptchaConfigured,
   verifyCaptcha,
 } from "@/components/auth/captcha-box";
-import { isSupabaseConfigured, uploadChatImage } from "@/lib/supabase";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -35,21 +34,9 @@ export function AuthCard() {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPass, setRegPass] = useState("");
-  const [regPhoto, setRegPhoto] = useState<File | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const loginCaptchaRef = useRef<CaptchaHandle>(null);
   const regCaptchaRef = useRef<CaptchaHandle>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-
-  const photoPreview = useMemo(
-    () => (regPhoto ? URL.createObjectURL(regPhoto) : null),
-    [regPhoto]
-  );
-  useEffect(() => {
-    return () => {
-      if (photoPreview) URL.revokeObjectURL(photoPreview);
-    };
-  }, [photoPreview]);
 
   useEffect(() => {
     if (!authLoading && user) router.replace("/");
@@ -129,11 +116,7 @@ export function AuthCard() {
     setNotice(null);
     try {
       if (!(await ensureCaptcha())) return;
-      let photoURL: string | undefined;
-      if (regPhoto && isSupabaseConfigured()) {
-        photoURL = await uploadChatImage(regPhoto);
-      }
-      await registerWithEmail(regName, regEmail, regPass, photoURL);
+      await registerWithEmail(regName, regEmail, regPass);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Pendaftaran gagal.");
@@ -240,35 +223,6 @@ export function AuthCard() {
 
               {error && flipped && <div className="form-msg error">{error}</div>}
               {notice && flipped && <div className="form-msg ok">{notice}</div>}
-
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(e) => {
-                  setRegPhoto(e.target.files?.[0] ?? null);
-                  e.target.value = "";
-                }}
-              />
-              <button
-                type="button"
-                className="photo-pick"
-                onClick={() => photoInputRef.current?.click()}
-                aria-label="Pilih foto profil"
-                title="Foto profil (opsional)"
-              >
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Foto profil" />
-                ) : (
-                  <span className="ph-icon">
-                    <Camera size={22} />
-                  </span>
-                )}
-                <span className="ph-badge">
-                  <Plus size={12} />
-                </span>
-              </button>
 
               <div className="input-box">
                 <User className="in-icon" />
