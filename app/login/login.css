@@ -368,7 +368,7 @@
     8px 8px 18px rgba(170, 178, 196, 0.55),
     inset -3px -3px 7px rgba(255, 255, 255, 0.95),
     inset 3px 3px 7px rgba(150, 158, 180, 0.35);
-  width: fit-content;
+  width: 100%;
   transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 
@@ -382,8 +382,10 @@
 }
 
 .auth-scope .captcha-3d .g-recaptcha {
-  transform: scale(0.9);
+  transform: scale(0.92);
   transform-origin: center;
+  display: flex;
+  justify-content: center;
 }
 
 /* ---------- responsive ---------- */

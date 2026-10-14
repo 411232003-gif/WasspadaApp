@@ -8,6 +8,7 @@ import {
   ReactNode,
   useCallback,
   useRef,
+  useSyncExternalStore,
 } from "react";
 import {
   fetchVolcanoes,
@@ -192,26 +193,54 @@ function getNearestEarthquake(
 }
 
 const STORAGE_KEY = "wasspada-kelurahan";
+const KELURAHAN_EVENT = "wsp-kelurahan-changed";
+
+/* Store eksternal untuk kelurahan tersimpan — hydration-safe karena
+   server selalu mengembalikan null lalu React re-render di client. */
+let kelurahanRaw: string | null | undefined;
+let kelurahanCache: RegionEntity | null = null;
+
+function getKelurahanSnapshot(): RegionEntity | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === kelurahanRaw) return kelurahanCache;
+  kelurahanRaw = raw;
+  if (!raw) {
+    kelurahanCache = null;
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as RegionEntity | null;
+    kelurahanCache =
+      parsed?.lat != null && parsed?.lon != null ? parsed : null;
+  } catch {
+    kelurahanCache = null;
+  }
+  return kelurahanCache;
+}
+
+function getServerKelurahanSnapshot(): RegionEntity | null {
+  return null;
+}
+
+function subscribeKelurahan(cb: () => void) {
+  window.addEventListener("storage", cb);
+  window.addEventListener(KELURAHAN_EVENT, cb);
+  return () => {
+    window.removeEventListener("storage", cb);
+    window.removeEventListener(KELURAHAN_EVENT, cb);
+  };
+}
 
 export function AlertProvider({ children }: { children: ReactNode }) {
   const [alertLevel, setAlertLevelState] = useState<AlertLevel>(1);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [selectedKelurahan, setSelectedKelurahanState] =
-    useState<RegionEntity | null>(() => {
-      if (typeof window === "undefined") return null;
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as RegionEntity | null;
-          if (parsed?.lat != null && parsed?.lon != null) return parsed;
-        }
-      } catch {
-        // ignore
-      }
-      return null;
-    });
+  const selectedKelurahan = useSyncExternalStore(
+    subscribeKelurahan,
+    getKelurahanSnapshot,
+    getServerKelurahanSnapshot
+  );
   const [nearestVolcano, setNearestVolcano] =
     useState<Nearest<Volcano> | null>(null);
   const [nearestEarthquake, setNearestEarthquake] =
@@ -229,13 +258,13 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     : DEFAULT_CENTER;
 
   const setSelectedKelurahan = useCallback((entity: RegionEntity | null) => {
-    setSelectedKelurahanState(entity);
     if (typeof window !== "undefined") {
       if (entity) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(entity));
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
+      window.dispatchEvent(new Event(KELURAHAN_EVENT));
     }
   }, []);
 
