@@ -5,6 +5,11 @@ import {
   ExternalLink,
   RefreshCw,
   Rss,
+  Waves,
+  CloudSun,
+  Wind,
+  Newspaper,
+  type LucideIcon,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import {
@@ -16,11 +21,14 @@ import {
 
 type SourceKey = NewsItem["source"];
 
-const SOURCE_META: Record<SourceKey, { label: string; color: string }> = {
-  petabencana: { label: "PetaBencana", color: "#22d3ee" },
-  bluesky: { label: "Bluesky", color: "#0085ff" },
-  gdacs: { label: "GDACS", color: "#fb923c" },
-  reliefweb: { label: "ReliefWeb", color: "#a78bfa" },
+const SOURCE_META: Record<
+  SourceKey,
+  { label: string; color: string; icon: LucideIcon }
+> = {
+  petabencana: { label: "PetaBencana", color: "#22d3ee", icon: Waves },
+  bluesky: { label: "Bluesky", color: "#0085ff", icon: CloudSun },
+  gdacs: { label: "GDACS", color: "#fb923c", icon: Wind },
+  reliefweb: { label: "ReliefWeb", color: "#a78bfa", icon: Newspaper },
 };
 
 const SOURCE_ORDER: SourceKey[] = [
@@ -178,7 +186,7 @@ export function NewsFeed() {
                 </span>
               </div>
 
-              {item.imageUrl && (
+              {item.imageUrl ? (
                 <a
                   href={item.url}
                   target="_blank"
@@ -191,6 +199,34 @@ export function NewsFeed() {
                     loading="lazy"
                     className="h-40 w-full object-cover transition-transform hover:scale-[1.02]"
                   />
+                </a>
+              ) : (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={item.title}
+                  className="relative mb-3 flex h-24 items-center justify-center overflow-hidden rounded-xl border border-card-border transition-transform hover:scale-[1.01]"
+                  style={{
+                    background: `linear-gradient(135deg, ${meta.color}26 0%, rgba(0,0,0,0.35) 55%, ${meta.color}1a 100%)`,
+                  }}
+                >
+                  <meta.icon
+                    className="absolute -left-2 -bottom-3 h-24 w-24 opacity-[0.12]"
+                    style={{ color: meta.color }}
+                  />
+                  <span
+                    className="relative flex h-11 w-11 items-center justify-center rounded-2xl"
+                    style={{
+                      background: `linear-gradient(145deg, ${meta.color}33, ${meta.color}14)`,
+                      boxShadow: `0 6px 16px ${meta.color}40, inset 0 1px 1px rgba(255,255,255,0.2)`,
+                    }}
+                  >
+                    <meta.icon
+                      className="h-5 w-5"
+                      style={{ color: meta.color }}
+                    />
+                  </span>
                 </a>
               )}
 
