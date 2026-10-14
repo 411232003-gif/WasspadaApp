@@ -22,7 +22,7 @@ import { logout, useAuthUser } from "@/lib/auth";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/live-map", label: "Live Map", icon: Map },
-  { href: "/3d-hazard", label: "3D Hazard Zone", icon: Box },
+  { href: "/3d-hazard", label: "Hazard Map", icon: Box },
   { href: "/alert-center", label: "Alert Center", icon: TriangleAlert },
   { href: "/news", label: "Berita", icon: Newspaper },
   { href: "/chat", label: "Chat Publik", icon: MessageCircle },

@@ -7,7 +7,7 @@ import { LayoutDashboard, Map, Box, TriangleAlert, MessageCircle, Newspaper } fr
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/live-map", label: "Map", icon: Map },
-  { href: "/3d-hazard", label: "3D", icon: Box },
+  { href: "/3d-hazard", label: "Hazard", icon: Box },
   { href: "/alert-center", label: "Alerts", icon: TriangleAlert },
   { href: "/news", label: "Berita", icon: Newspaper },
   { href: "/chat", label: "Chat", icon: MessageCircle },

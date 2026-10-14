@@ -265,7 +265,8 @@ html[data-theme="light"] .gs-panel {
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
   opacity: 0;
   visibility: hidden;
   transform: translateX(-40px);
@@ -281,6 +282,36 @@ html[data-theme="light"] .gs-panel {
   visibility: visible;
   transform: translateX(0);
   pointer-events: auto;
+}
+
+.gs-panel::-webkit-scrollbar {
+  display: none;
+}
+
+/* layar pendek: rapatkan jarak rail agar semua ikon muat */
+@media (max-height: 760px) {
+  .gs-rail {
+    padding: 0.6rem 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .gs-rail::-webkit-scrollbar {
+    display: none;
+  }
+  .gs-rail .gs-mini {
+    gap: 3px;
+  }
+  .gs-rail .gs-mini li a,
+  .gs-rail .gs-mini li button {
+    width: 40px;
+    height: 40px;
+  }
+  .gs-rail .gs-line {
+    margin: 6px 0;
+  }
+  .gs-rail .gs-dots {
+    margin-bottom: 0.5rem;
+  }
 }
 
 /* window dots */
@@ -934,6 +965,17 @@ html[data-theme="light"] .gs-menu li:hover {
   position: relative;
   width: 2rem;
   height: 2rem;
+}
+
+/* animated wind-flow dashes on Leaflet polylines */
+.leaflet-pane .wind-flow {
+  animation: wind-flow-dash 1.2s linear infinite;
+}
+
+@keyframes wind-flow-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
 }
 
 .map-marker-core {
