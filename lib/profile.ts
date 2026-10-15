@@ -39,4 +39,8 @@ export async function saveUserProfile(
     displayName: profile.displayName.slice(0, 40),
     ...(profile.photoUrl ? { photoURL: profile.photoUrl } : {}),
   });
+
+  // Refresh agar nama/foto baru langsung dipakai di seluruh app
+  // (onAuthStateChanged tidak terpicu oleh updateProfile).
+  await auth.currentUser.reload();
 }

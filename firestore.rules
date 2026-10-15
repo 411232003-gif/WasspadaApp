@@ -38,11 +38,19 @@ service cloud.firestore {
                      && request.resource.data.name.size() <= 40
                      && request.resource.data.likes is list
                      && (!('imageUrl' in request.resource.data)
-                         || request.resource.data.imageUrl is string)
+                         || (request.resource.data.imageUrl is string
+                             && request.resource.data.imageUrl.size() <= 1000))
                      && (!('photoUrl' in request.resource.data)
-                         || request.resource.data.photoUrl is string)
+                         || (request.resource.data.photoUrl is string
+                             && request.resource.data.photoUrl.size() <= 1000))
                      && (!('parentId' in request.resource.data)
-                         || request.resource.data.parentId is string);
+                         || request.resource.data.parentId is string)
+                     && (!('parentName' in request.resource.data)
+                         || (request.resource.data.parentName is string
+                             && request.resource.data.parentName.size() <= 40))
+                     && (!('parentText' in request.resource.data)
+                         || (request.resource.data.parentText is string
+                             && request.resource.data.parentText.size() <= 200));
       allow update: if isMember()
                      && request.resource.data.diff(resource.data)
                           .affectedKeys().hasOnly(['likes'])
@@ -54,7 +62,16 @@ service cloud.firestore {
     // any profile (needed for chat avatars); only the owner can write.
     match /profiles/{userId} {
       allow read: if isMember();
-      allow write: if isMember() && request.auth.uid == userId;
+      allow write: if isMember()
+                     && request.auth.uid == userId
+                     && request.resource.data.displayName is string
+                     && request.resource.data.displayName.size() <= 40
+                     && (!('birthDate' in request.resource.data)
+                         || (request.resource.data.birthDate is string
+                             && request.resource.data.birthDate.size() <= 10))
+                     && (!('photoUrl' in request.resource.data)
+                         || (request.resource.data.photoUrl is string
+                             && request.resource.data.photoUrl.size() <= 1000));
     }
 
     // User-scoped bookmarks and subscriptions.

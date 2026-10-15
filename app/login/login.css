@@ -75,16 +75,16 @@
 /* ---------- form ---------- */
 .auth-scope .login-form {
   position: relative;
-  width: 290px;
+  width: 256px;
   z-index: 10;
 }
 
 .auth-scope .login-form h1 {
   color: #4a4a4a;
-  font-size: 40px;
+  font-size: 34px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   text-align: center;
   text-shadow:
     1px 1px 1px rgba(255, 255, 255, 0.9),
@@ -94,34 +94,34 @@
 .auth-scope .login-form .subtitle {
   text-align: center;
   color: #9a9a9a;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0.3px;
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 
 /* ---------- input box ---------- */
 .auth-scope .input-box {
   position: relative;
-  margin-bottom: 18px;
+  margin-bottom: 13px;
 }
 
 .auth-scope .input-box .in-icon {
   position: absolute;
-  left: 18px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: #909090;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   z-index: 2;
   transition: color 0.35s ease;
 }
 
 .auth-scope .input-box input {
   width: 100%;
-  height: 46px;
-  padding: 0 18px 0 45px;
+  height: 40px;
+  padding: 0 16px 0 40px;
   border: none;
   outline: none;
   background: #e8e8e8;
@@ -161,7 +161,7 @@
   justify-content: space-between;
   align-items: center;
   margin-top: -1px;
-  margin-bottom: 30px;
+  margin-bottom: 18px;
 }
 
 .auth-scope .remember {
@@ -233,8 +233,8 @@
 /* ---------- submit button ---------- */
 .auth-scope .login-form button.submit {
   position: relative;
-  width: 290px;
-  height: 40px;
+  width: 100%;
+  height: 38px;
   display: block;
   margin: auto;
   overflow: hidden;
@@ -305,7 +305,7 @@
 /* ---------- misc ---------- */
 .auth-scope .login-form .signup-text {
   text-align: center;
-  margin-top: 22px;
+  margin-top: 14px;
   font-size: 12px;
   color: #9a9a9a;
 }
@@ -358,8 +358,8 @@
   position: relative;
   display: flex;
   justify-content: center;
-  margin: -4px auto 16px;
-  padding: 10px 8px;
+  margin: -2px auto 14px;
+  padding: 6px 4px;
   border-radius: 16px;
   background: linear-gradient(145deg, #efefef, #dcdcdc);
   border: 1px solid rgba(255, 255, 255, 0.8);
@@ -382,10 +382,11 @@
 }
 
 .auth-scope .captcha-3d .g-recaptcha {
-  transform: scale(0.92);
+  transform: scale(0.82);
   transform-origin: center;
   display: flex;
   justify-content: center;
+  margin: -8px 0;
 }
 
 /* ---------- responsive ---------- */
