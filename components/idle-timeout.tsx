@@ -8,7 +8,7 @@ const IDLE_LIMIT_MS = 15 * 60 * 1000;
 
 // Halaman pemantauan dibiarkan tanpa timeout — pengguna bisa "diam" sambil
 // memantau data live.
-const MONITOR_PAGES = new Set(["/", "/live-map", "/3d-hazard", "/alert-center"]);
+const MONITOR_PAGES = new Set(["/", "/live-map", "/alert-center"]);
 
 const ACTIVITY_EVENTS = [
   "mousemove",

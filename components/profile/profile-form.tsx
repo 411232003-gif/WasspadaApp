@@ -67,7 +67,7 @@ export function ProfileForm() {
       let photoUrl = existingPhoto ?? undefined;
       if (photo) {
         if (!isSupabaseConfigured()) {
-          setError("Supabase belum dikonfigurasi — foto tidak tersimpan.");
+          setError("Penyimpanan foto sedang tidak aktif — foto tidak tersimpan.");
           return;
         }
         photoUrl = await uploadChatImage(photo);

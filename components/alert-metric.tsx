@@ -20,7 +20,7 @@ export function AlertMetric() {
           >
             {alertConfig.shortLabel}
           </p>
-          <p className="text-xs text-fg-muted">Status kelurahan saat ini</p>
+          <p className="text-xs text-fg-muted">Status lokasi saat ini</p>
         </div>
         <div
           className="rounded-xl p-3 glow-ring"

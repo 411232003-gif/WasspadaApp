@@ -1,20 +1,21 @@
-import MapWrapper from "@/components/map/map-wrapper";
+import MonevMapWrapper from "@/components/monev/monev-map-wrapper";
 
 export const metadata = {
-  title: "Live Map | WasspadaApp",
+  title: "Monev Map | WasspadaApp",
 };
 
-export default function LiveMapPage() {
+export default function MonevMapPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-2xl font-bold text-fg">Live Map</h2>
+        <h2 className="text-2xl font-bold text-fg">Monev Map</h2>
         <p className="text-sm text-fg-muted">
-          potensi sebaran abu vulkanik dan radius dampak bencana.
+          Monitoring &amp; evaluasi real-time: gunung api (PVMBG), gempa (BMKG),
+          aliran angin, zona KRB, sebaran abu vulkanik, dan jalur evakuasi.
         </p>
       </div>
 
-      <MapWrapper />
+      <MonevMapWrapper />
     </div>
   );
 }

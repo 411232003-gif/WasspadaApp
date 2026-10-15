@@ -14,7 +14,7 @@ export default function DashboardPage() {
         <div>
           <h2 className="text-2xl font-bold text-fg">Dashboard</h2>
           <p className="text-sm text-fg-muted">
-            Pantau kondisi bencana di kelurahan target secara real-time.
+            Pantau kondisi bencana di lokasi pilihanmu secara real-time.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -43,15 +43,16 @@ export default function DashboardPage() {
             Peta Dampak & Radius Bencana
           </h3>
           <p className="mt-2 max-w-md text-sm text-fg-muted">
-            Lihat sebaran abu vulkanik, radius gempa, dan jalur evakuasi dari
-            data BMKG, PVMBG, dan Open-Meteo secara real-time di Live Map.
+            Lihat sebaran abu vulkanik, radius gempa, zona KRB, aliran angin,
+            dan jalur evakuasi dari data BMKG, PVMBG, dan Open-Meteo secara
+            real-time di Monev Map.
           </p>
           <Link
             href="/live-map"
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent/10 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/20"
           >
             <Map className="h-4 w-4" />
-            Buka Live Map
+            Buka Monev Map
           </Link>
         </GlassCard>
 

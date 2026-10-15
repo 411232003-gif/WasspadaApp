@@ -1,5 +1,5 @@
 import { ShieldAlert } from "lucide-react";
-import { KelurahanSelector } from "@/components/kelurahan-selector";
+import { LocationPicker } from "@/components/location-picker";
 import { GlobalSearch } from "@/components/global-search";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
@@ -16,14 +16,14 @@ export function Header() {
               WasspadaApp
             </h1>
             <span className="text-[10px] uppercase tracking-wider text-fg-muted">
-              Kelurahan Disaster Monitor
+              Pemantau Bencana Sekitarmu
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <GlobalSearch />
-          <KelurahanSelector />
+          <LocationPicker />
           <ThemeSwitcher />
         </div>
       </div>

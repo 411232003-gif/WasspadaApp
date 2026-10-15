@@ -5,7 +5,7 @@ import {
   Activity,
   Flame,
   RefreshCw,
-  Database,
+  Save,
   MapPin,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
@@ -76,10 +76,10 @@ export function LiveDataPanel() {
         location: eq.location ?? undefined,
         tsunamiPotential: eq.potential ?? undefined,
       });
-      setLogStatus("Gempa tercatat di Firestore");
+      setLogStatus("Gempa tersimpan di riwayat");
     } catch (e) {
       setLogStatus(
-        e instanceof Error ? e.message : "Gagal mencatat ke Firestore"
+        e instanceof Error ? e.message : "Gagal menyimpan ke riwayat"
       );
     }
     setTimeout(() => setLogStatus(null), 3000);
@@ -97,10 +97,10 @@ export function LiveDataPanel() {
           volcanoStatus: v.status,
         });
       }
-      setLogStatus(`${highAlert.length} status gunung tercatat di Firestore`);
+      setLogStatus(`${highAlert.length} status gunung tersimpan di riwayat`);
     } catch (e) {
       setLogStatus(
-        e instanceof Error ? e.message : "Gagal mencatat ke Firestore"
+        e instanceof Error ? e.message : "Gagal menyimpan ke riwayat"
       );
     }
     setTimeout(() => setLogStatus(null), 3000);
@@ -111,7 +111,7 @@ export function LiveDataPanel() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-accent" />
-          <h3 className="text-sm font-semibold text-fg">Data BMKG & PVMBG Live</h3>
+          <h3 className="text-sm font-semibold text-fg">Data Terkini BMKG & PVMBG</h3>
         </div>
         <div className="flex items-center gap-2">
           {logStatus && (
@@ -124,7 +124,7 @@ export function LiveDataPanel() {
             className="flex items-center gap-1.5 rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            Perbarui
           </button>
         </div>
       </div>
@@ -182,7 +182,7 @@ export function LiveDataPanel() {
                 type="button"
                 className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent/10 py-1.5 text-xs font-medium text-accent hover:bg-accent/20"
               >
-                <Database className="h-3.5 w-3.5" /> Log ke Firestore
+                <Save className="h-3.5 w-3.5" /> Simpan ke Riwayat
               </button>
             </div>
           ) : (
@@ -202,7 +202,7 @@ export function LiveDataPanel() {
             )}
           </div>
           {pvmbg?.error ? (
-            <p className="text-sm text-fg-muted">Gagal memuat PVMBG: {pvmbg.error}</p>
+            <p className="text-sm text-fg-muted">Data gunung api gagal dimuat: {pvmbg.error}</p>
           ) : sortedVolcanoes.length > 0 ? (
             <div className="max-h-[260px] overflow-auto space-y-2 pr-1">
               {sortedVolcanoes.map((v) => {
@@ -240,7 +240,7 @@ export function LiveDataPanel() {
               type="button"
               className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent/10 py-1.5 text-xs font-medium text-accent hover:bg-accent/20"
             >
-              <Database className="h-3.5 w-3.5" /> Log Semua Siaga/Awas
+              <Save className="h-3.5 w-3.5" /> Simpan Semua Siaga/Awas
             </button>
           )}
         </div>

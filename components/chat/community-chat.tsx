@@ -165,7 +165,7 @@ function Composer({
           onClick={() => fileRef.current?.click()}
           disabled={disabled || sending}
           aria-label="Lampirkan foto"
-          title="Kirim foto (via Supabase)"
+          title="Kirim foto"
           className={`rounded-xl bg-white/5 text-fg-muted hover:text-accent disabled:opacity-50 ${
             compact ? "p-2" : "p-2.5"
           }`}
@@ -504,13 +504,12 @@ export function CommunityChat() {
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {!configured && (
           <p className="rounded-lg bg-yellow-500/10 p-3 text-center text-xs text-yellow-400">
-            Firebase belum dikonfigurasi. Chat memerlukan koneksi Firestore.
+            Layanan chat sedang tidak aktif. Silakan coba lagi nanti.
           </p>
         )}
         {configured && !supabaseReady && (
           <p className="rounded-lg bg-yellow-500/10 p-3 text-center text-xs text-yellow-400">
-            Supabase belum dikonfigurasi — kirim teks bisa, kirim foto nonaktif.
-            Isi NEXT_PUBLIC_SUPABASE_* di .env.
+            Fitur kirim foto sedang nonaktif — kirim teks tetap bisa digunakan.
           </p>
         )}
         {configured && topLevel.length === 0 && (

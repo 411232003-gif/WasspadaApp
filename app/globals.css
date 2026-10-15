@@ -288,29 +288,49 @@ html[data-theme="light"] .gs-panel {
   display: none;
 }
 
-/* layar pendek: rapatkan jarak rail agar semua ikon muat */
+/* layar pendek: rapatkan jarak rail agar semua ikon muat.
+   overflow tidak boleh dipasang di rail karena akan meng-clip
+   tooltip data-tip yang berada di luar tepi rail */
 @media (max-height: 760px) {
   .gs-rail {
-    padding: 0.6rem 0;
+    top: 4.5rem;
+    bottom: 1rem;
+    padding: 0.5rem 0;
+  }
+  .gs-rail .gs-dots {
+    display: none;
+  }
+  .gs-rail .gs-logo {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 0.4rem;
+  }
+  .gs-rail .gs-mini {
+    gap: 2px;
+  }
+  .gs-rail .gs-mini li a,
+  .gs-rail .gs-mini li button {
+    width: 38px;
+    height: 38px;
+  }
+  .gs-rail .gs-line {
+    margin: 4px 0;
+  }
+  .gs-rail .gs-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+  }
+}
+
+/* layar sangat pendek: scroll sebagai fallback terakhir */
+@media (max-height: 480px) {
+  .gs-rail {
     overflow-y: auto;
     scrollbar-width: none;
   }
   .gs-rail::-webkit-scrollbar {
     display: none;
-  }
-  .gs-rail .gs-mini {
-    gap: 3px;
-  }
-  .gs-rail .gs-mini li a,
-  .gs-rail .gs-mini li button {
-    width: 40px;
-    height: 40px;
-  }
-  .gs-rail .gs-line {
-    margin: 6px 0;
-  }
-  .gs-rail .gs-dots {
-    margin-bottom: 0.5rem;
   }
 }
 
@@ -683,12 +703,21 @@ html[data-theme="light"] .gs-menu li:hover {
   flex-shrink: 0;
 }
 
-/* account card bottom */
+/* footer akun — mengalir di bawah panel, tidak absolute agar tidak menimpa menu */
+.gs-foot {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+html[data-theme="light"] .gs-foot {
+  border-top-color: rgba(147, 51, 234, 0.15);
+}
+
 .gs-account {
-  position: absolute;
-  left: 1.5rem;
-  right: 1.5rem;
-  bottom: 1.25rem;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -698,12 +727,39 @@ html[data-theme="light"] .gs-menu li:hover {
   transition: 0.35s;
   border: none;
   box-shadow: none;
+  flex: 1;
+  min-width: 0;
 }
 
 .gs-account:hover {
   background: rgba(255, 255, 255, 0.08);
   transform: translateY(-4px);
   box-shadow: none;
+}
+
+html[data-theme="light"] .gs-account:hover {
+  background: rgba(147, 51, 234, 0.1);
+}
+
+.gs-logout {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--gs-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.gs-logout:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+  transform: translateY(-2px);
 }
 
 .gs-account-text {
@@ -729,12 +785,14 @@ html[data-theme="light"] .gs-menu li:hover {
 /* ===== 3D theme toggle (adapted dari referensi Uiverse) ===== */
 .t3d {
   display: inline-block;
-  width: 52px;
-  height: 68px;
+  width: 40px;
+  height: 52px;
 }
 
 .t3d-switch {
   display: block;
+  transform: scale(0.76);
+  transform-origin: top left;
   background-color: #0a0a0f;
   width: 52px;
   height: 68px;
@@ -915,7 +973,7 @@ html[data-theme="light"] .gs-menu li:hover {
 .gs-panel .gs-menu-title,
 .gs-panel .gs-divider,
 .gs-panel .gs-menu li,
-.gs-panel .gs-account {
+.gs-panel .gs-foot {
   opacity: 0;
   transform: translateY(18px);
   transition:
@@ -934,13 +992,13 @@ html[data-theme="light"] .gs-menu li:hover {
 .gs-wrap.open .gs-menu li:nth-child(6) { transition-delay: 0.72s; }
 .gs-wrap.open .secondary li:nth-child(1) { transition-delay: 0.78s; }
 .gs-wrap.open .secondary li:nth-child(2) { transition-delay: 0.84s; }
-.gs-wrap.open .gs-account { transition-delay: 0.95s; }
+.gs-wrap.open .gs-foot { transition-delay: 0.95s; }
 
 .gs-wrap.open .gs-title,
 .gs-wrap.open .gs-menu-title,
 .gs-wrap.open .gs-divider,
 .gs-wrap.open .gs-menu li,
-.gs-wrap.open .gs-account {
+.gs-wrap.open .gs-foot {
   opacity: 1;
   transform: translateY(0);
 }
@@ -1074,4 +1132,373 @@ html[data-theme="light"] .gs-menu li:hover {
   cursor: pointer;
   box-shadow: 0 0 10px var(--accent);
   border: none;
+}
+
+/* ===== Mobile radial dial nav (semua fitur dalam 1 knob) ===== */
+.mnav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(3, 6, 18, 0.45);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: mnav-fade 0.25s ease;
+}
+
+@keyframes mnav-fade {
+  from { opacity: 0; }
+}
+
+.mnav-dial {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  z-index: 60;
+}
+
+/* piringan 3D yang mengembang di belakang ikon */
+.mnav-plate {
+  position: absolute;
+  left: 50%;
+  bottom: calc(59px + env(safe-area-inset-bottom)); /* sejajar pusat knob */
+  width: 250px;
+  height: 250px;
+  transform: translate(-50%, 50%) scale(0.3);
+  border-radius: 50%;
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.14), transparent 45%),
+    var(--card);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid var(--card-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 30px rgba(0, 0, 0, 0.2),
+    0 -18px 50px rgba(0, 0, 0, 0.45),
+    0 0 26px var(--glow);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.45s cubic-bezier(0.34, 1.3, 0.4, 1),
+    opacity 0.3s ease;
+}
+
+.mnav-dial.open .mnav-plate {
+  transform: translate(-50%, 50%) scale(1);
+  opacity: 1;
+}
+
+/* ring glow di tepi piringan saat terbuka */
+.mnav-plate::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 1px dashed rgba(168, 85, 247, 0.25);
+}
+
+/* item fitur — menyebar pada busur atas */
+.mnav-items {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mnav-items li {
+  --a: 0deg;
+  --i: 0;
+  position: absolute;
+  left: 50%;
+  bottom: calc(59px + env(safe-area-inset-bottom));
+  transform:
+    translate(-50%, 50%)
+    rotate(var(--a))
+    translateY(0)
+    rotate(calc(var(--a) * -1))
+    scale(0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.45s cubic-bezier(0.34, 1.35, 0.4, 1) calc(var(--i) * 40ms),
+    opacity 0.3s ease calc(var(--i) * 40ms);
+}
+
+.mnav-dial.open .mnav-items li {
+  transform:
+    translate(-50%, 50%)
+    rotate(var(--a))
+    translateY(-96px)
+    rotate(calc(var(--a) * -1))
+    scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* netralkan gaya tombol global agar kolom ikon+label tidak berbingkai */
+.mnav-item,
+nav a[href].mnav-item,
+.mnav-side,
+nav a[href].mnav-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 56px;
+  border: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+
+/* gelembung kaca "cair" — highlight air di atas, kaustik di bawah */
+.mnav-item-btn,
+.mnav-side-btn {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--fg);
+  background:
+    radial-gradient(130% 120% at 28% 10%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.05) 42%, transparent 62%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.03) 55%, rgba(0, 0, 0, 0.18));
+  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  backdrop-filter: blur(12px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -8px 14px rgba(255, 255, 255, 0.06),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.22),
+    0 10px 22px rgba(0, 0, 0, 0.4),
+    0 0 12px var(--glow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* tetesan air di permukaan atas */
+.mnav-item-btn::before,
+.mnav-side-btn::before {
+  content: "";
+  position: absolute;
+  top: 7%;
+  left: 14%;
+  width: 44%;
+  height: 26%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.85),
+    transparent 70%
+  );
+  filter: blur(1px);
+  transform: rotate(-18deg);
+  pointer-events: none;
+}
+
+/* kilau kaustik di dasar gelembung */
+.mnav-item-btn::after,
+.mnav-side-btn::after {
+  content: "";
+  position: absolute;
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62%;
+  height: 20%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(168, 85, 247, 0.35),
+    transparent 72%
+  );
+  filter: blur(3px);
+  pointer-events: none;
+}
+
+html[data-theme="light"] .mnav-item-btn,
+html[data-theme="light"] .mnav-side-btn {
+  background:
+    radial-gradient(130% 120% at 28% 10%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.25) 45%, transparent 65%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.2) 55%, rgba(147, 51, 234, 0.08));
+  border-color: rgba(147, 51, 234, 0.28);
+}
+
+.mnav-item-btn {
+  width: 46px;
+  height: 46px;
+}
+
+.mnav-side-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.mnav-side-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--fg-muted);
+}
+
+.mnav-side {
+  width: auto;
+  min-width: 64px;
+}
+
+.mnav-side.current .mnav-side-label {
+  color: var(--accent);
+}
+
+.mnav-side.current .mnav-side-btn {
+  color: #fff;
+  background:
+    radial-gradient(130% 120% at 28% 10%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.1) 42%, transparent 62%),
+    linear-gradient(135deg, var(--accent), var(--accent-secondary));
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.6),
+    0 10px 22px rgba(0, 0, 0, 0.35),
+    0 0 16px var(--accent-secondary);
+}
+
+.mnav-item:active .mnav-item-btn {
+  transform: scale(0.92);
+}
+
+.mnav-item.current .mnav-item-btn {
+  background:
+    radial-gradient(130% 120% at 28% 10%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.1) 42%, transparent 62%),
+    linear-gradient(135deg, var(--accent), var(--accent-secondary));
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.6),
+    0 0 14px var(--accent-secondary),
+    0 0 22px var(--glow);
+}
+
+.mnav-item-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  padding: 1px 7px;
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+/* knob pusat */
+.mnav-knob {
+  position: absolute;
+  left: 50%;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  color: var(--fg);
+  background:
+    radial-gradient(130% 120% at 28% 8%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.05) 42%, transparent 62%),
+    linear-gradient(160deg, #2b2b47, #0c0c18);
+  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  backdrop-filter: blur(12px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.45),
+    0 0 0 4px var(--card),
+    0 0 18px var(--glow);
+}
+
+html[data-theme="light"] .mnav-knob {
+  background:
+    radial-gradient(130% 120% at 28% 8%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.3) 45%, transparent 65%),
+    linear-gradient(160deg, #ffffff, #dde3f2);
+  border-color: rgba(147, 51, 234, 0.3);
+}
+
+/* takik indikator di tepi atas knob — menyala saat terbuka */
+.mnav-knob::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16%;
+  height: 5px;
+  border-radius: 99px;
+  background: linear-gradient(#7c3aed, #312e81);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  transition: 0.3s;
+}
+
+html[data-theme="light"] .mnav-knob::before {
+  background: linear-gradient(#9333ea, #c4b5fd);
+}
+
+.mnav-dial.open .mnav-knob::before,
+.mnav-dial .mnav-knob:hover::before {
+  background: linear-gradient(90deg, var(--accent), var(--accent-secondary));
+  box-shadow:
+    0 0 8px var(--accent-secondary),
+    0 0 14px var(--glow);
+}
+
+.mnav-knob svg {
+  animation: mnav-pop 0.3s cubic-bezier(0.34, 1.4, 0.4, 1);
+}
+
+@keyframes mnav-pop {
+  from {
+    transform: scale(0.3) rotate(-90deg);
+    opacity: 0;
+  }
+}
+
+/* knob menyala saat halaman aktif adalah salah satu fitur */
+.mnav-dial.active .mnav-knob {
+  border-color: var(--accent);
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+    0 0 0 4px var(--card),
+    0 0 16px var(--accent),
+    0 0 28px var(--glow);
+}
+
+.mnav-dial.active .mnav-knob svg {
+  color: var(--accent);
+}
+
+/* kalahkan transform hover/active global pada knob */
+.mnav-dial .mnav-knob:hover {
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.mnav-dial .mnav-knob:active {
+  transform: translateX(-50%) translateY(1px) scale(0.94);
+}
+
+/* ===== header mobile: perkecil saklar tema agar tidak overflow ===== */
+@media (max-width: 767px) {
+  .t3d {
+    width: 32px;
+    height: 42px;
+  }
+  .t3d-switch {
+    transform: scale(0.6);
+    transform-origin: top left;
+  }
 }
