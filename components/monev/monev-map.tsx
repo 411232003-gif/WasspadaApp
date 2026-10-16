@@ -49,7 +49,7 @@ import {
 
 type Direction = "N" | "S" | "E" | "W";
 type AshDirection = Direction | "AUTO";
-type TileProvider = "osm" | "esri-street" | "carto-dark";
+type TileProvider = "osm" | "esri-street" | "esri-sat";
 
 const DIRECTION_DEGREES: Record<Direction, number> = {
   N: 0,
@@ -86,15 +86,6 @@ function getVolcanoIcon(color: string, level: number) {
     </div>`,
     iconSize: [32, 32],
     iconAnchor: [16, 16],
-  });
-}
-
-function getAshLabelIcon(text: string) {
-  return L.divIcon({
-    className: "bg-transparent",
-    html: `<div class="whitespace-nowrap rounded-md bg-black/70 px-2 py-1 text-[10px] text-white backdrop-blur-sm" style="border:1px solid rgba(255,255,255,0.2);">${text}</div>`,
-    iconSize: [80, 24],
-    iconAnchor: [40, 12],
   });
 }
 
@@ -164,6 +155,7 @@ export default function MonevMap() {
   const [wind, setWind] = useState<WindData | null>(null);
   const [loading, setLoading] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [legendOpen, setLegendOpen] = useState(true);
   const [shaking, setShaking] = useState(false);
   const lastTsRef = useRef<string | null>(null);
 
@@ -172,7 +164,7 @@ export default function MonevMap() {
   const [ashIntensity, setAshIntensity] = useState(40);
   const [tileProvider, setTileProvider] = useState<TileProvider>(() => {
     const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
-    const allowed: TileProvider[] = ["osm", "esri-street", "carto-dark"];
+    const allowed: TileProvider[] = ["osm", "esri-street", "esri-sat"];
     return allowed.includes(env) ? env : "esri-street";
   });
   const [layers, setLayers] = useState({
@@ -275,18 +267,6 @@ export default function MonevMap() {
     [plumeOrigin, ashBearing, plumeLen]
   );
 
-  const ashTip = useMemo(
-    () => computeDestination(plumeOrigin, ashBearing, plumeLen * 111),
-    [plumeOrigin, ashBearing, plumeLen]
-  );
-
-  const ashDirectionLabel = useMemo(() => {
-    if (ashDirection === "AUTO" && wind) {
-      return `Abu ke ${cardinalFrom(wind.windDirectionTo)}`;
-    }
-    return `Abu ke ${ashDirection === "AUTO" ? cardinalFrom(ashBearing) : ashDirection}`;
-  }, [ashDirection, wind, ashBearing]);
-
   /* garis aliran angin paralel (animasi dash via CSS) */
   const windLines = useMemo(() => {
     const perp = (windTo + 90) % 360;
@@ -333,12 +313,12 @@ export default function MonevMap() {
         subdomains: "abc",
       };
     }
-    if (tileProvider === "carto-dark") {
+    if (tileProvider === "esri-sat") {
       return {
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | &copy; <a href="https://carto.com/">CARTO</a>',
-        subdomains: "abcd",
+          '&copy; <a href="https://www.esri.com/">Esri</a> | Maxar, Earthstar Geographics',
+        subdomains: "",
       };
     }
     return {
@@ -565,13 +545,7 @@ export default function MonevMap() {
             </Tooltip>
           </Polygon>
         )}
-        {layers.plume && plumeSource && (
-          <Marker
-            position={ashTip}
-            icon={getAshLabelIcon(ashDirectionLabel)}
-            zIndexOffset={1000}
-          />
-        )}
+
 
         {/* jalur evakuasi ke zona aman */}
         {layers.evacuation && (
@@ -666,18 +640,18 @@ export default function MonevMap() {
               <Satellite className="h-3.5 w-3.5" /> Basemap
             </label>
             <div className="grid grid-cols-3 gap-1.5">
-              {(["esri-street", "osm", "carto-dark"] as const).map((p) => (
+              {(["esri-sat", "esri-street", "osm"] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setTileProvider(p)}
-                  className={`rounded-lg px-2 py-1.5 text-[10px] font-bold transition-colors ${
+                  className={`rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${
                     tileProvider === p
                       ? "bg-accent/15 text-accent"
                       : "bg-white/5 text-fg-muted hover:text-fg"
                   }`}
                 >
-                  {p === "osm" ? "OSM" : p === "carto-dark" ? "Dark" : "Esri"}
+                  {p === "esri-sat" ? "Satelit" : p === "osm" ? "Standar" : "Jalan"}
                 </button>
               ))}
             </div>
@@ -785,9 +759,30 @@ export default function MonevMap() {
         </div>
       )}
 
-      {/* legenda */}
+      {/* legenda — bisa disembunyikan */}
+      {!legendOpen && (
+        <button
+          type="button"
+          onClick={() => setLegendOpen(true)}
+          aria-label="Tampilkan legenda"
+          className="absolute bottom-3 left-3 z-[500] grid h-9 w-9 place-items-center rounded-full glass-panel text-fg shadow-lg hover:text-accent"
+        >
+          <Info className="h-4 w-4" />
+        </button>
+      )}
+      {legendOpen && (
       <div className="absolute bottom-3 left-3 z-[500] space-y-1 rounded-xl glass-panel px-3 py-2 text-[10px] shadow-lg">
-        <p className="font-bold text-fg">Legenda</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-bold text-fg">Legenda</p>
+          <button
+            type="button"
+            onClick={() => setLegendOpen(false)}
+            aria-label="Sembunyikan legenda"
+            className="grid h-5 w-5 place-items-center rounded-md text-fg-muted hover:bg-white/10 hover:text-fg"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
         <p className="flex items-center gap-1.5 text-fg-muted">
           <Flame className="h-3 w-3 text-orange-400" /> Gunung (warna = status)
         </p>
@@ -808,6 +803,7 @@ export default function MonevMap() {
           <MapPin className="h-3 w-3 text-yellow-400" /> Lokasi kamu
         </p>
       </div>
+      )}
 
       {loading && (
         <div className="absolute inset-x-0 top-3 z-[500] mx-auto w-fit rounded-full glass-panel px-4 py-1.5 text-xs text-fg-muted shadow-lg">

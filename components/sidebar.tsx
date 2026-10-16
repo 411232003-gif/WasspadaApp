@@ -6,12 +6,12 @@ import { useState } from "react";
 import {
   ChevronRight,
   LayoutDashboard,
+  LayoutGrid,
   LogIn,
   LogOut,
   Map,
   MessageCircle,
   Newspaper,
-  ShieldAlert,
   TriangleAlert,
   UserCircle2,
   X,
@@ -26,16 +26,6 @@ const NAV_ITEMS = [
   { href: "/chat", label: "Chat Publik", icon: MessageCircle },
   { href: "/profil", label: "Profil Saya", icon: UserCircle2 },
 ];
-
-function WindowDots({ big = false }: { big?: boolean }) {
-  return (
-    <div className={`gs-dots${big ? " big" : ""}`}>
-      <span className="g" />
-      <span className="r" />
-      <span className="y" />
-    </div>
-  );
-}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -60,45 +50,24 @@ export function Sidebar() {
     router.push("/login");
   };
 
+  const toggle = () => setOpen((v) => !v);
+
   return (
     <div className={`gs-wrap${open ? " open" : ""} hidden md:block`}>
-      {/* ===== rail: hanya tombol fitur + akun ===== */}
-      <aside className="gs-rail">
-        <span className="gs-shine" />
-        <WindowDots />
-
-        <button
-          type="button"
-          className="gs-logo"
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? "Tutup menu" : "Buka menu"}
-          aria-expanded={open}
-        >
-          {open ? <X className="h-6 w-6" /> : <ShieldAlert className="h-6 w-6" />}
-        </button>
-
-        <div className="gs-line" />
-
-        <Link
-          href={user ? "/profil" : "/login"}
-          className="gs-profile"
-          aria-label={user ? displayName : "Masuk"}
-          data-tip={user ? `${displayName} — Profil` : "Masuk"}
-        >
-          {user ? (
-            avatar
-          ) : (
-            <span className="gs-avatar gs-avatar-login">
-              <LogIn className="h-5 w-5" />
-            </span>
-          )}
-        </Link>
-      </aside>
+      {/* tombol bulat pembuka semua fitur */}
+      <button
+        type="button"
+        className="gs-fab"
+        onClick={toggle}
+        aria-label={open ? "Tutup menu" : "Buka menu"}
+        aria-expanded={open}
+      >
+        {open ? <X className="h-5 w-5" /> : <LayoutGrid className="h-5 w-5" />}
+      </button>
 
       {/* ===== panel fitur ===== */}
       <section className="gs-panel" aria-hidden={!open}>
         <span className="gs-shine" />
-        <WindowDots big />
 
         <h1 className="gs-title">Wasspada</h1>
         <span className="gs-menu-title">SEMUA FITUR</span>
