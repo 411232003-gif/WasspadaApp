@@ -49,7 +49,7 @@ import {
 
 type Direction = "N" | "S" | "E" | "W";
 type AshDirection = Direction | "AUTO";
-type TileProvider = "osm" | "esri-street";
+type TileProvider = "osm" | "esri-street" | "carto-dark";
 
 const DIRECTION_DEGREES: Record<Direction, number> = {
   N: 0,
@@ -172,7 +172,7 @@ export default function MonevMap() {
   const [ashIntensity, setAshIntensity] = useState(40);
   const [tileProvider, setTileProvider] = useState<TileProvider>(() => {
     const env = process.env.NEXT_PUBLIC_DEFAULT_TILE_PROVIDER as TileProvider;
-    const allowed: TileProvider[] = ["osm", "esri-street"];
+    const allowed: TileProvider[] = ["osm", "esri-street", "carto-dark"];
     return allowed.includes(env) ? env : "esri-street";
   });
   const [layers, setLayers] = useState({
@@ -331,6 +331,14 @@ export default function MonevMap() {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         subdomains: "abc",
+      };
+    }
+    if (tileProvider === "carto-dark") {
+      return {
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | &copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: "abcd",
       };
     }
     return {
@@ -657,8 +665,8 @@ export default function MonevMap() {
             <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
               <Satellite className="h-3.5 w-3.5" /> Basemap
             </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(["esri-street", "osm"] as const).map((p) => (
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["esri-street", "osm", "carto-dark"] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -669,7 +677,7 @@ export default function MonevMap() {
                       : "bg-white/5 text-fg-muted hover:text-fg"
                   }`}
                 >
-                  {p === "osm" ? "OSM" : "Esri"}
+                  {p === "osm" ? "OSM" : p === "carto-dark" ? "Dark" : "Esri"}
                 </button>
               ))}
             </div>
