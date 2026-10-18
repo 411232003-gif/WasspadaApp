@@ -71,6 +71,7 @@ const KRB_ZONES = [
   { km: 5, label: "KRB II", color: "#fb923c" },
   { km: 8, label: "KRB I", color: "#facc15" },
 ];
+const MAX_FIRE_MARKERS = 250;
 
 /* ---------- icon makers ---------- */
 function getDotIcon(color: string) {
@@ -259,9 +260,24 @@ export default function MonevMap() {
     (detection) => haversineKm(center, detection.coordinates) <= 25
   );
 
+  const visibleFireDetections = useMemo(() => {
+    const prioritized = fireDetections.map((detection) => ({
+      detection,
+      isNearby: haversineKm(center, detection.coordinates) <= 25,
+    }));
+    prioritized.sort(
+      (a, b) =>
+        Number(b.isNearby) - Number(a.isNearby) ||
+        Date.parse(b.detection.detectedAt) - Date.parse(a.detection.detectedAt)
+    );
+    return prioritized
+      .slice(0, MAX_FIRE_MARKERS)
+      .map(({ detection }) => detection);
+  }, [center, fireDetections]);
+
   useSmartPolling(loadFireDetections, {
     stableIntervalMs: 300000,
-    alertIntervalMs: 60000,
+    alertIntervalMs: 120000,
     isAlertActive: nearbyFireActive,
   });
 
@@ -435,7 +451,7 @@ export default function MonevMap() {
 
   const fireMarkers = useMemo(
     () =>
-      fireDetections.map((detection) => (
+      visibleFireDetections.map((detection) => (
         <Marker
           key={detection.id}
           position={detection.coordinates}
@@ -474,7 +490,7 @@ export default function MonevMap() {
           </Popup>
         </Marker>
       )),
-    [fireDetections]
+    [visibleFireDetections]
   );
 
   const toggle = (key: keyof typeof layers) =>
