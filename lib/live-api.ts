@@ -1,5 +1,7 @@
 "use client";
 
+import type { FireDetectionsResponse } from "./fire-detections";
+
 export interface Earthquake {
   date: string | null;
   time: string | null;
@@ -256,6 +258,21 @@ export async function fetchWind(lat: number, lon: number): Promise<WindData> {
       windSpeed: 0,
       windDirectionFrom: 0,
       windDirectionTo: 180,
+      updatedAt: new Date().toISOString(),
+      error: errMsg(e),
+    };
+  }
+}
+
+export async function fetchFireDetections(): Promise<FireDetectionsResponse> {
+  try {
+    const res = await fetch("/api/fires");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    return {
+      detections: [],
+      sources: {},
       updatedAt: new Date().toISOString(),
       error: errMsg(e),
     };

@@ -23,6 +23,7 @@ import { useSmartPolling } from "@/lib/use-smart-polling";
 import {
   fetchVolcanoes,
   fetchBMKG,
+  fetchFireDetections,
   fetchWind,
   getBearing,
   computeDestination,
@@ -34,6 +35,11 @@ import {
   levelFromEarthquake,
   type WindData,
 } from "@/lib/live-api";
+import type {
+  FireConfidence,
+  FireDetection,
+  FireSourceStatus,
+} from "@/lib/fire-detections";
 import {
   Wind,
   Layers,
@@ -99,6 +105,23 @@ function getKelurahanIcon() {
   });
 }
 
+function getFireIcon(confidence: FireConfidence) {
+  const level = confidence === "reported" ? "reported" : confidence;
+  return L.divIcon({
+    className: "fire-marker-icon",
+    html: `<span class="fire-marker fire-marker-${level}" aria-hidden="true"><span class="fire-marker-pulse"></span><span class="fire-marker-flame">🔥</span></span>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  });
+}
+
+function confidenceLabel(confidence: FireConfidence) {
+  if (confidence === "reported") return "Laporan kejadian";
+  if (confidence === "high") return "Keyakinan tinggi";
+  if (confidence === "medium") return "Keyakinan sedang";
+  return "Keyakinan rendah";
+}
+
 function windArrowIcon(degTo: number) {
   const rot = degTo - 90; // karakter ➤ menghadap timur (90°)
   return L.divIcon({
@@ -155,6 +178,10 @@ export default function MonevMap() {
 
   const [volcanoes, setVolcanoes] = useState<Volcano[]>([]);
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
+  const [fireDetections, setFireDetections] = useState<FireDetection[]>([]);
+  const [fireSourceStatus, setFireSourceStatus] = useState<
+    Record<string, FireSourceStatus>
+  >({});
   const [wind, setWind] = useState<WindData | null>(null);
   const [loading, setLoading] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -173,6 +200,7 @@ export default function MonevMap() {
   const [layers, setLayers] = useState({
     volcanoes: true,
     earthquakes: true,
+    fires: true,
     wind: true,
     krb: true,
     plume: true,
@@ -217,6 +245,24 @@ export default function MonevMap() {
     stableIntervalMs: 300000,
     alertIntervalMs: 60000,
     isAlertActive,
+  });
+
+  const loadFireDetections = async () => {
+    const response = await fetchFireDetections();
+    if (!response.error) {
+      setFireDetections(response.detections);
+      setFireSourceStatus(response.sources);
+    }
+  };
+
+  const nearbyFireActive = fireDetections.some(
+    (detection) => haversineKm(center, detection.coordinates) <= 25
+  );
+
+  useSmartPolling(loadFireDetections, {
+    stableIntervalMs: 300000,
+    alertIntervalMs: 60000,
+    isAlertActive: nearbyFireActive,
   });
 
   const loadWind = async () => {
@@ -387,12 +433,57 @@ export default function MonevMap() {
     });
   }, [earthquakes]);
 
+  const fireMarkers = useMemo(
+    () =>
+      fireDetections.map((detection) => (
+        <Marker
+          key={detection.id}
+          position={detection.coordinates}
+          icon={getFireIcon(detection.confidence)}
+        >
+          <Popup>
+            <div className="text-bg min-w-40">
+              <strong>{detection.title}</strong>
+              <br />
+              {detection.source === "NASA FIRMS"
+                ? "Indikasi hotspot dari satelit; perlu verifikasi lapangan"
+                : "Laporan PetaBencana; belum terverifikasi"}
+              <br />
+              {confidenceLabel(detection.confidence)}
+              <br />
+              {new Date(detection.detectedAt).toLocaleString("id-ID", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "Asia/Jakarta",
+              })}
+              {detection.frp != null && (
+                <>
+                  <br />
+                  Daya radiasi: {detection.frp.toFixed(1)} MW
+                </>
+              )}
+              {detection.detail && (
+                <>
+                  <br />
+                  {detection.detail}
+                </>
+              )}
+              <br />
+              {detection.coordinates[0].toFixed(4)}, {detection.coordinates[1].toFixed(4)}
+            </div>
+          </Popup>
+        </Marker>
+      )),
+    [fireDetections]
+  );
+
   const toggle = (key: keyof typeof layers) =>
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const layerItems: { key: keyof typeof layers; label: string }[] = [
     { key: "volcanoes", label: "Gunung Api Aktif" },
     { key: "earthquakes", label: "Gempa & Radius Dampak" },
+    { key: "fires", label: `Titik Kebakaran (${fireDetections.length})` },
     { key: "krb", label: "Zona KRB" },
     { key: "wind", label: "Aliran Angin" },
     { key: "plume", label: "Sebaran Abu" },
@@ -467,6 +558,16 @@ export default function MonevMap() {
             spiderfyDistanceMultiplier={2}
           >
             {earthquakeMarkers}
+          </MarkerClusterGroup>
+        )}
+        {layers.fires && fireMarkers.length > 0 && (
+          <MarkerClusterGroup
+            key="fire-cluster"
+            showCoverageOnHover={false}
+            spiderfyDistanceMultiplier={2}
+            maxClusterRadius={48}
+          >
+            {fireMarkers}
           </MarkerClusterGroup>
         )}
         {layers.earthquakes &&
@@ -650,8 +751,8 @@ export default function MonevMap() {
                   type="button"
                   onClick={() => setTileProvider(p)}
                   className={`rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${tileProvider === p
-                      ? "bg-accent/15 text-accent"
-                      : "bg-white/5 text-fg-muted hover:text-fg"
+                    ? "bg-accent/15 text-accent"
+                    : "bg-white/5 text-fg-muted hover:text-fg"
                     }`}
                 >
                   {p === "esri-sat" ? "Satelit" : p === "osm" ? "Standar" : "Jalan"}
@@ -698,8 +799,8 @@ export default function MonevMap() {
                   onClick={() => setAshDirection(dir)}
                   type="button"
                   className={`min-w-0 rounded-lg px-1 py-1.5 text-[9px] font-semibold transition-all ${ashDirection === dir
-                      ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
-                      : "text-fg hover:bg-white/5"
+                    ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
+                    : "text-fg hover:bg-white/5"
                     }`}
                 >
                   {dir === "AUTO" ? "Auto" : dir}
@@ -735,8 +836,8 @@ export default function MonevMap() {
                 type="button"
                 onClick={() => toggle(l.key)}
                 className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${layers[l.key]
-                    ? "bg-accent/15 text-accent"
-                    : "bg-white/5 text-fg-muted hover:text-fg"
+                  ? "bg-accent/15 text-accent"
+                  : "bg-white/5 text-fg-muted hover:text-fg"
                   }`}
               >
                 {l.label}
@@ -753,9 +854,14 @@ export default function MonevMap() {
             <p className="text-[11px] leading-relaxed text-fg-muted">
               {loading
                 ? "Memuat data gunung api dan gempa..."
-                : `Memantau ${volcanoes.length} gunung api aktif dan ${earthquakes.length} gempa dari BMKG, PVMBG & Open-Meteo.`}
+                : `Memantau ${volcanoes.length} gunung api, ${earthquakes.length} gempa, dan ${fireDetections.length} titik kebakaran.`}
             </p>
           </div>
+          {!fireSourceStatus["NASA FIRMS"]?.configured && (
+            <p className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2 text-[10px] leading-relaxed text-amber-200">
+              Hotspot satelit belum diaktifkan. Marker saat ini berasal dari laporan PetaBencana.
+            </p>
+          )}
         </div>
       )}
 
@@ -788,6 +894,9 @@ export default function MonevMap() {
           </p>
           <p className="flex items-center gap-1.5 text-fg-muted">
             <Activity className="h-3 w-3 text-orange-500" /> Ring gempa ∝ magnitude
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <Flame className="h-3 w-3 text-red-500" /> Api: merah tinggi/laporan, oranye sedang, kuning rendah
           </p>
           <p className="flex items-center gap-1.5 text-fg-muted">
             <Wind className="h-3 w-3 text-sky-400" /> Aliran angin real-time
