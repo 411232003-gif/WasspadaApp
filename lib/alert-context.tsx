@@ -19,6 +19,7 @@ import {
   Earthquake,
   RegionEntity,
 } from "./live-api";
+import { useSmartPolling } from "./use-smart-polling";
 
 export type AlertLevel = 1 | 2 | 3 | 4;
 
@@ -256,6 +257,8 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   const disasterCenter: [number, number] = selectedKelurahan
     ? [selectedKelurahan.lat, selectedKelurahan.lon]
     : DEFAULT_CENTER;
+  const disasterCenterLat = disasterCenter[0];
+  const disasterCenterLon = disasterCenter[1];
 
   const setSelectedKelurahan = useCallback((entity: RegionEntity | null) => {
     if (typeof window !== "undefined") {
@@ -316,56 +319,51 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     }
   }, [alertLevel, isInKrb3, audioEnabled, isInDangerZone, kelurahanInDanger]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const sync = async () => {
+    try {
+      const [volcanoRes, bmkgRes] = await Promise.all([
+        fetchVolcanoes(),
+        fetchBMKG(),
+      ]);
 
-    async function sync() {
-      try {
-        const [volcanoRes, bmkgRes] = await Promise.all([
-          fetchVolcanoes(),
-          fetchBMKG(),
-        ]);
-        if (cancelled) return;
-
-        const volcanoList = (volcanoRes.error ? [] : volcanoRes.volcanoes) || [];
-        const earthquakeList = bmkgRes.error
-          ? bmkgRes.felt || []
-          : [bmkgRes.latest, ...(bmkgRes.felt || [])].filter(
-              (e): e is Earthquake => e != null && e.coordinates != null
-            );
-
-        const center = disasterCenter;
-        const v = getNearestVolcano(center, volcanoList);
-        const e = getNearestEarthquake(center, earthquakeList);
-
-        setVolcanoes(volcanoList);
-        setEarthquakes(earthquakeList);
-        setLatestEarthquake(bmkgRes.error ? null : bmkgRes.latest);
-        setDataUpdatedAt(new Date().toISOString());
-        setNearestVolcano(v);
-        setNearestEarthquake(e);
-
-        const maxVolcanoLevel = volcanoList.reduce(
-          (m, vol) => Math.max(m, vol.level),
-          1
+      const volcanoList = (volcanoRes.error ? [] : volcanoRes.volcanoes) || [];
+      const earthquakeList = bmkgRes.error
+        ? bmkgRes.felt || []
+        : [bmkgRes.latest, ...(bmkgRes.felt || [])].filter(
+          (e): e is Earthquake => e != null && e.coordinates != null
         );
-        const eqLevel = e ? levelFromEarthquake(e.item.magnitude || 0) : 1;
-        const kelurahanLevel = v ? v.item.level : 1;
-        setAlertLevelState(
-          Math.max(maxVolcanoLevel, eqLevel, kelurahanLevel) as AlertLevel
-        );
-      } catch {
-        // ignore
-      }
+
+      const center: [number, number] = [disasterCenterLat, disasterCenterLon];
+      const v = getNearestVolcano(center, volcanoList);
+      const e = getNearestEarthquake(center, earthquakeList);
+
+      setVolcanoes(volcanoList);
+      setEarthquakes(earthquakeList);
+      setLatestEarthquake(bmkgRes.error ? null : bmkgRes.latest);
+      setDataUpdatedAt(new Date().toISOString());
+      setNearestVolcano(v);
+      setNearestEarthquake(e);
+
+      const maxVolcanoLevel = volcanoList.reduce(
+        (m, vol) => Math.max(m, vol.level),
+        1
+      );
+      const eqLevel = e ? levelFromEarthquake(e.item.magnitude || 0) : 1;
+      const kelurahanLevel = v ? v.item.level : 1;
+      setAlertLevelState(
+        Math.max(maxVolcanoLevel, eqLevel, kelurahanLevel) as AlertLevel
+      );
+    } catch {
+      // ignore sync errors
     }
+  };
 
-    sync();
-    const interval = setInterval(sync, 120000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [disasterCenter, selectedKelurahan?.slug]);
+  useSmartPolling(sync, {
+    stableIntervalMs: 300000,
+    alertIntervalMs: 60000,
+    isAlertActive: alertLevel >= 3,
+    refreshKey: `${disasterCenterLat},${disasterCenterLon}`,
+  });
 
   return (
     <AlertContext.Provider

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import Image from "next/image";
 import {
   ChevronRight,
   LayoutDashboard,
@@ -39,7 +40,13 @@ export function Sidebar() {
   const displayName = user?.displayName || user?.email || "Tamu";
   const avatar = user?.photoURL ? (
     <span className="gs-avatar gs-avatar-photo">
-      <img src={user.photoURL} alt={displayName} />
+      <Image
+        src={user.photoURL}
+        alt={displayName}
+        width={44}
+        height={44}
+        unoptimized
+      />
     </span>
   ) : (
     <span className="gs-avatar">{initial}</span>

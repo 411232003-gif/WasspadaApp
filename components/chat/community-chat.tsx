@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Heart,
@@ -75,10 +76,13 @@ function ChatImage({ src }: { src: string }) {
       rel="noopener noreferrer"
       className="mt-1.5 block"
     >
-      <img
+      <Image
         src={src}
         alt="Foto dari chat"
-        className="max-h-64 w-auto rounded-xl border border-card-border object-cover"
+        width={960}
+        height={720}
+        sizes="(max-width: 640px) 100vw, 640px"
+        className="max-h-64 max-w-full w-auto rounded-xl border border-card-border object-cover"
         loading="lazy"
         onError={() => setFailed(true)}
       />
@@ -128,9 +132,12 @@ function Composer({
     <div className={compact ? "" : `border-t border-card-border ${pad}`}>
       {preview && (
         <div className="relative mb-2 inline-block">
-          <img
+          <Image
             src={preview}
             alt="Lampiran"
+            width={320}
+            height={320}
+            unoptimized
             className="h-20 rounded-xl border border-card-border object-cover"
           />
           <button
@@ -166,9 +173,8 @@ function Composer({
           disabled={disabled || sending}
           aria-label="Lampirkan foto"
           title="Kirim foto"
-          className={`rounded-xl bg-white/5 text-fg-muted hover:text-accent disabled:opacity-50 ${
-            compact ? "p-2" : "p-2.5"
-          }`}
+          className={`rounded-xl bg-white/5 text-fg-muted hover:text-accent disabled:opacity-50 ${compact ? "p-2" : "p-2.5"
+            }`}
         >
           <ImagePlus className={compact ? "h-4 w-4" : "h-5 w-5"} />
         </button>
@@ -183,9 +189,8 @@ function Composer({
         <button
           type="submit"
           disabled={(!text.trim() && !image) || sending || disabled}
-          className={`flex items-center gap-1.5 rounded-xl bg-accent/15 font-bold text-accent hover:bg-accent/25 disabled:opacity-50 ${
-            compact ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm"
-          }`}
+          className={`flex items-center gap-1.5 rounded-xl bg-accent/15 font-bold text-accent hover:bg-accent/25 disabled:opacity-50 ${compact ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm"
+            }`}
         >
           {sending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -203,9 +208,12 @@ function ChatAvatar({ src, name }: { src?: string; name: string }) {
   const [failed, setFailed] = useState(false);
   if (src && !failed) {
     return (
-      <img
+      <Image
         src={src}
         alt={name}
+        width={24}
+        height={24}
+        unoptimized
         onError={() => setFailed(true)}
         className="h-6 w-6 shrink-0 rounded-full border border-card-border object-cover"
       />
@@ -244,7 +252,7 @@ export function CommunityChat() {
 
   useEffect(() => {
     if (!account) return;
-    cleanupExpiredChatImages().catch(() => {});
+    cleanupExpiredChatImages().catch(() => { });
     return subscribeChatMessages(setMessages);
   }, [account]);
 
@@ -344,23 +352,20 @@ export function CommunityChat() {
         className={`flex flex-col ${own ? "items-end" : "items-start"}`}
       >
         <div
-          className={`${
-            isReply
+          className={`${isReply
               ? "max-w-[90%] rounded-2xl rounded-bl-sm bg-white/5 px-3 py-2"
-              : `max-w-[80%] rounded-2xl px-3.5 py-2 sm:max-w-[65%] ${
-                  own
-                    ? "rounded-br-sm bg-accent/15 border border-accent/40"
-                    : "rounded-bl-sm bg-white/5 border border-card-border"
-                }`
-          }`}
+              : `max-w-[80%] rounded-2xl px-3.5 py-2 sm:max-w-[65%] ${own
+                ? "rounded-br-sm bg-accent/15 border border-accent/40"
+                : "rounded-bl-sm bg-white/5 border border-card-border"
+              }`
+            }`}
           style={
             own && !isReply ? { boxShadow: "0 0 12px var(--glow)" } : undefined
           }
         >
           <p
-            className={`flex items-center gap-1.5 text-[10px] font-bold ${
-              own ? "text-accent" : "text-fg-muted"
-            }`}
+            className={`flex items-center gap-1.5 text-[10px] font-bold ${own ? "text-accent" : "text-fg-muted"
+              }`}
           >
             <ChatAvatar src={msg.photoUrl} name={msg.name} />
             {own ? "Kamu" : msg.name || "Anonim"}
@@ -384,9 +389,8 @@ export function CommunityChat() {
                 onClick={() => toggleLike(msg)}
                 disabled={!uid}
                 aria-label="Sukai pesan"
-                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${
-                  liked ? "text-red-400" : "text-fg-muted hover:text-red-400"
-                }`}
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${liked ? "text-red-400" : "text-fg-muted hover:text-red-400"
+                  }`}
               >
                 <Heart
                   className={`h-3.5 w-3.5 ${liked ? "fill-red-400" : ""}`}
@@ -401,9 +405,8 @@ export function CommunityChat() {
                   setReplyImage(null);
                 }}
                 aria-label="Komentar"
-                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${
-                  threadOpen ? "text-accent" : "text-fg-muted hover:text-accent"
-                }`}
+                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${threadOpen ? "text-accent" : "text-fg-muted hover:text-accent"
+                  }`}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 {replies.length > 0 ? replies.length : ""}

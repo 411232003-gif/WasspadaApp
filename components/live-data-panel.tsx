@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   Flame,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/live-api";
 import { pushAlert } from "@/lib/firestore";
 import { ALERT_LEVELS } from "@/lib/alert-context";
+import { useSmartPolling } from "@/lib/use-smart-polling";
 
 function formatTime(iso: string | null) {
   if (!iso) return "-";
@@ -47,11 +48,13 @@ export function LiveDataPanel() {
     }
   };
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  useSmartPolling(load, {
+    stableIntervalMs: 300000,
+    alertIntervalMs: 60000,
+    isAlertActive:
+      (pvmbg?.volcanoes.some((volcano) => volcano.level >= 3) ?? false) ||
+      (bmkg?.latest?.magnitude ?? 0) >= 5.5,
+  });
 
   const allVolcanoes = pvmbg?.volcanoes || [];
   const sortedVolcanoes = [...allVolcanoes].sort(
@@ -143,11 +146,10 @@ export function LiveDataPanel() {
                 <span
                   className="rounded-full px-2 py-0.5 text-[10px] font-bold"
                   style={{
-                    backgroundColor: `${
-                      ALERT_LEVELS[
-                        levelFromEarthquake(bmkg.latest.magnitude || 0)
-                      ].color
-                    }20`,
+                    backgroundColor: `${ALERT_LEVELS[
+                      levelFromEarthquake(bmkg.latest.magnitude || 0)
+                    ].color
+                      }20`,
                     color: ALERT_LEVELS[
                       levelFromEarthquake(bmkg.latest.magnitude || 0)
                     ].color,

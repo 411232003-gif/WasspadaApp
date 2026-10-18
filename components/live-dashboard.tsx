@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Activity, Flame, Radius, Wind } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import { AlertMetric } from "@/components/alert-metric";
@@ -12,6 +12,7 @@ import {
   levelFromEarthquake,
   type WindData,
 } from "@/lib/live-api";
+import { useSmartPolling } from "@/lib/use-smart-polling";
 
 function formatTime(iso: string | null | undefined) {
   if (!iso) return "-";
@@ -76,8 +77,8 @@ export function DashboardStatCards() {
             <p className="mt-1 text-[10px] text-fg-muted">
               {latestEarthquake
                 ? `${latestEarthquake.depthKm ?? "-"} km · ${formatTime(
-                    latestEarthquake.timestamp
-                  )}`
+                  latestEarthquake.timestamp
+                )}`
                 : ""}
             </p>
           </div>
@@ -148,27 +149,19 @@ export function DashboardStatCards() {
 }
 
 export function AshWindCard() {
-  const { disasterCenter, nearestVolcano } = useAlert();
+  const { disasterCenter, nearestVolcano, alertLevel } = useAlert();
   const [wind, setWind] = useState<WindData | null>(null);
   const centerLat = disasterCenter[0];
   const centerLon = disasterCenter[1];
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      fetchWind(centerLat, centerLon)
-        .then((w) => {
-          if (!cancelled) setWind(w);
-        })
-        .catch(() => {});
-    };
-    load();
-    const interval = setInterval(load, 300000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [centerLat, centerLon]);
+  const load = async () => setWind(await fetchWind(centerLat, centerLon));
+
+  useSmartPolling(load, {
+    stableIntervalMs: 300000,
+    alertIntervalMs: 60000,
+    isAlertActive: alertLevel > 1,
+    refreshKey: `${centerLat},${centerLon}`,
+  });
 
   return (
     <GlassCard className="p-5">

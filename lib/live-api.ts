@@ -231,7 +231,7 @@ export function computeDestination(
   const d = distanceKm / R;
   const lat2 = Math.asin(
     Math.sin(lat1) * Math.cos(d) +
-      Math.cos(lat1) * Math.sin(d) * Math.cos(brng)
+    Math.cos(lat1) * Math.sin(d) * Math.cos(brng)
   );
   const lon2 =
     lon1 +
@@ -244,19 +244,13 @@ export function computeDestination(
 
 export async function fetchWind(lat: number, lon: number): Promise<WindData> {
   try {
-    const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
-    );
+    const params = new URLSearchParams({
+      lat: lat.toFixed(4),
+      lon: lon.toFixed(4),
+    });
+    const res = await fetch(`/api/wind?${params}`);
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-    const data = await res.json();
-    const from = data?.current_weather?.winddirection ?? 0;
-    const speed = data?.current_weather?.windspeed ?? 0;
-    return {
-      windSpeed: speed,
-      windDirectionFrom: from,
-      windDirectionTo: (from + 180) % 360,
-      updatedAt: new Date().toISOString(),
-    };
+    return await res.json();
   } catch (e) {
     return {
       windSpeed: 0,

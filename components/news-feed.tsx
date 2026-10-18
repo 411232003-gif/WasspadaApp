@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import Image from "next/image";
 import {
   ExternalLink,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
   NewsResponse,
   NewsSourceStatus,
 } from "@/lib/live-api";
+import { useSmartPolling } from "@/lib/use-smart-polling";
 
 type SourceKey = NewsItem["source"];
 
@@ -55,7 +57,6 @@ export function NewsFeed() {
   const [filter, setFilter] = useState<SourceKey | "all">("all");
 
   const load = async () => {
-    setLoading(true);
     try {
       setData(await fetchNews());
     } finally {
@@ -63,23 +64,7 @@ export function NewsFeed() {
     }
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const res = await fetchNews();
-        if (!cancelled) setData(res);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    run();
-    const interval = setInterval(run, 300000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
+  useSmartPolling(load, { stableIntervalMs: 300000 });
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const sources: Record<string, NewsSourceStatus> = data?.sources || {};
@@ -95,11 +80,10 @@ export function NewsFeed() {
         <button
           type="button"
           onClick={() => setFilter("all")}
-          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-            filter === "all"
-              ? "bg-accent/20 text-accent"
-              : "text-fg-muted hover:text-fg"
-          }`}
+          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${filter === "all"
+            ? "bg-accent/20 text-accent"
+            : "text-fg-muted hover:text-fg"
+            }`}
         >
           Semua ({items.length})
         </button>
@@ -112,9 +96,8 @@ export function NewsFeed() {
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                active ? "text-bg" : "text-fg-muted hover:text-fg"
-              }`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${active ? "text-bg" : "text-fg-muted hover:text-fg"
+                }`}
               style={active ? { backgroundColor: meta.color } : undefined}
               title={status?.error || meta.label}
             >
@@ -193,9 +176,13 @@ export function NewsFeed() {
                   rel="noopener noreferrer"
                   className="mb-3 block overflow-hidden rounded-xl border border-card-border"
                 >
-                  <img
+                  <Image
                     src={item.imageUrl}
                     alt={item.title}
+                    width={800}
+                    height={320}
+                    sizes="(max-width: 640px) 100vw, 50vw"
+                    unoptimized
                     loading="lazy"
                     className="h-40 w-full object-cover transition-transform hover:scale-[1.02]"
                   />

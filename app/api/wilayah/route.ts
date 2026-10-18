@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-
-export const revalidate = 86400;
+import { cachedJsonResponse } from "@/lib/api-cache";
 
 interface RegionEntity {
   id: string;
@@ -68,11 +67,18 @@ export async function GET(request: Request) {
 
     const list = rawList.map(normalizeEntity).filter((e): e is RegionEntity => e !== null);
 
-    return NextResponse.json({
+    const payload = {
       level,
       count: list.length,
       entities: list,
-    });
+    };
+
+    return cachedJsonResponse(
+      request,
+      new URL(request.url).pathname + new URL(request.url).search,
+      payload,
+      payload
+    );
   } catch (error) {
     console.error("Wilayah fetch failed:", error);
     return NextResponse.json(

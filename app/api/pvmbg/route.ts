@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-
-export const revalidate = 300;
+import { cachedJsonResponse } from "@/lib/api-cache";
 
 const LEVEL_REGEX = /Level (IV|III|II|I) \((Awas|Siaga|Waspada|Normal)\)/g;
 const VOLCANO_REGEX = /<td>\s*([^<]+?)\s*<a[\s\S]*?Lihat laporan<\/a>/g;
@@ -17,10 +16,11 @@ function romanLevelToLabel(level: number) {
   return `Level ${labels[level - 1]}`;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const res = await fetch(
-      "https://magma.esdm.go.id/v1/gunung-api/tingkat-aktivitas"
+      "https://magma.esdm.go.id/v1/gunung-api/tingkat-aktivitas",
+      { next: { revalidate: 30 } }
     );
 
     if (!res.ok) throw new Error(`PVMBG responded ${res.status}`);
@@ -69,10 +69,12 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({
+    const payload = {
       volcanoes,
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    return cachedJsonResponse(request, "pvmbg", payload, { volcanoes });
   } catch (error) {
     console.error("PVMBG fetch failed:", error);
     return NextResponse.json(
@@ -81,7 +83,7 @@ export async function GET() {
         volcanoes: [],
         updatedAt: new Date().toISOString(),
       },
-      { status: 502 }
+      { status: 502, headers: { "Cache-Control": "no-store" } }
     );
   }
 }

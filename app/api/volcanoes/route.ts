@@ -1,6 +1,4 @@
-import { NextResponse } from "next/server";
-
-export const revalidate = 300;
+import { cachedJsonResponse } from "@/lib/api-cache";
 
 const PVMBG_URL =
   "https://magma.esdm.go.id/v1/gunung-api/tingkat-aktivitas";
@@ -43,7 +41,7 @@ interface CsvVolcano {
 }
 
 async function fetchPVMBGVolcanoes(): Promise<PvmbgVolcano[]> {
-  const res = await fetch(PVMBG_URL);
+  const res = await fetch(PVMBG_URL, { next: { revalidate: 30 } });
   if (!res.ok) throw new Error(`PVMBG ${res.status}`);
   const html = await res.text();
 
@@ -76,7 +74,7 @@ async function fetchPVMBGVolcanoes(): Promise<PvmbgVolcano[]> {
 }
 
 async function fetchVolcanoCoordinates(): Promise<CsvVolcano[]> {
-  const res = await fetch(VOLCANO_CSV_URL);
+  const res = await fetch(VOLCANO_CSV_URL, { next: { revalidate: 86400 } });
   if (!res.ok) throw new Error(`CSV ${res.status}`);
   const text = await res.text();
   const lines = text.trim().split("\n").slice(1);
@@ -113,7 +111,7 @@ function findBestMatch(name: string, coords: CsvVolcano[]) {
   return best;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   let pvmbgList: PvmbgVolcano[] = [];
   let pvmbgError = "";
   try {
@@ -132,7 +130,7 @@ export async function GET() {
 
   // Fallback ke semua koordinat CSV dengan level Normal kalau PVMBG mati
   if (pvmbgList.length === 0 && coordsList.length > 0) {
-    return NextResponse.json({
+    const payload = {
       volcanoes: coordsList.map((c) => ({
         name: c.name,
         level: 1,
@@ -143,6 +141,10 @@ export async function GET() {
       })),
       warning: pvmbgError || undefined,
       updatedAt: new Date().toISOString(),
+    };
+    return cachedJsonResponse(request, "volcanoes", payload, {
+      volcanoes: payload.volcanoes,
+      warning: payload.warning,
     });
   }
 
@@ -160,5 +162,6 @@ export async function GET() {
     })
     .filter((v) => v.lat !== null && v.lon !== null);
 
-  return NextResponse.json({ volcanoes, updatedAt: new Date().toISOString() });
+  const payload = { volcanoes, updatedAt: new Date().toISOString() };
+  return cachedJsonResponse(request, "volcanoes", payload, { volcanoes });
 }

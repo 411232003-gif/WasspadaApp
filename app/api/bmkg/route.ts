@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-
-export const revalidate = 60;
+import { cachedJsonResponse } from "@/lib/api-cache";
 
 interface BmkgRawItem {
   Tanggal?: string;
@@ -47,11 +46,15 @@ function parseItem(item: BmkgRawItem) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const [autoRes, feltRes] = await Promise.all([
-      fetch("https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json"),
-      fetch("https://data.bmkg.go.id/DataMKG/TEWS/gempadirasakan.json"),
+      fetch("https://data.bmkg.go.id/DataMKG/TEWS/autogempa.json", {
+        next: { revalidate: 30 },
+      }),
+      fetch("https://data.bmkg.go.id/DataMKG/TEWS/gempadirasakan.json", {
+        next: { revalidate: 30 },
+      }),
     ]);
 
     if (!autoRes.ok) throw new Error(`BMKG autogempa responded ${autoRes.status}`);
@@ -66,14 +69,19 @@ export async function GET() {
 
     const feltList = Array.isArray(feltData?.Infogempa?.gempa)
       ? (feltData.Infogempa.gempa as BmkgRawItem[])
-          .slice(0, 15)
-          .map(parseItem)
+        .slice(0, 15)
+        .map(parseItem)
       : [];
 
-    return NextResponse.json({
+    const payload = {
       latest,
       felt: feltList,
       updatedAt: new Date().toISOString(),
+    };
+
+    return cachedJsonResponse(request, "bmkg", payload, {
+      latest,
+      felt: feltList,
     });
   } catch (error) {
     console.error("BMKG fetch failed:", error);
@@ -84,7 +92,7 @@ export async function GET() {
         felt: [],
         updatedAt: new Date().toISOString(),
       },
-      { status: 502 }
+      { status: 502, headers: { "Cache-Control": "no-store" } }
     );
   }
 }

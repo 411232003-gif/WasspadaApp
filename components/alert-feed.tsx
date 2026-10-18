@@ -14,6 +14,7 @@ import { subscribeAlerts, AlertDoc } from "@/lib/firestore";
 import { fetchBMKG, fetchPVMBG, levelFromEarthquake } from "@/lib/live-api";
 import { Timestamp } from "firebase/firestore";
 import { ALERT_LEVELS } from "@/lib/alert-context";
+import { useSmartPolling } from "@/lib/use-smart-polling";
 
 function formatTime(value: Timestamp | number | null | undefined) {
   if (!value) return "-";
@@ -57,9 +58,8 @@ async function fetchLiveAlerts(): Promise<AlertDoc[]> {
       id: `bmkg-${eq!.timestamp || `${eq!.location}-${magnitude}`}`,
       type: "earthquake",
       title: `Gempa BMKG M ${magnitude}`,
-      description: `${eq!.location || "Lokasi tidak diketahui"}. Kedalaman ${
-        eq!.depthKm ?? "-"
-      } km. ${eq!.potential || ""}`.trim(),
+      description: `${eq!.location || "Lokasi tidak diketahui"}. Kedalaman ${eq!.depthKm ?? "-"
+        } km. ${eq!.potential || ""}`.trim(),
       level,
       magnitude,
       depth: eq!.depthKm ?? undefined,
@@ -99,23 +99,19 @@ export function AlertFeed({ limit = 10 }: { limit?: number }) {
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const data = await fetchLiveAlerts();
-        if (!cancelled) setLiveAlerts(data);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    const interval = setInterval(load, 60000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
+  const load = async () => {
+    try {
+      setLiveAlerts(await fetchLiveAlerts());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useSmartPolling(load, {
+    stableIntervalMs: 300000,
+    alertIntervalMs: 60000,
+    isAlertActive: liveAlerts.some((alert) => alert.level >= 3),
+  });
 
   const alerts = useMemo(() => {
     const seen = new Set<string>();

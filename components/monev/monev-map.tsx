@@ -19,6 +19,7 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import { useTheme } from "@/lib/theme-provider";
 import { useAlert, ALERT_LEVELS } from "@/lib/alert-context";
+import { useSmartPolling } from "@/lib/use-smart-polling";
 import {
   fetchVolcanoes,
   fetchBMKG,
@@ -149,6 +150,8 @@ export default function MonevMap() {
   const { theme } = useTheme();
   const { disasterCenter, selectedKelurahan, nearestVolcano, nearestEarthquake } =
     useAlert();
+  const centerLat = disasterCenter[0];
+  const centerLon = disasterCenter[1];
 
   const [volcanoes, setVolcanoes] = useState<Volcano[]>([]);
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
@@ -178,51 +181,52 @@ export default function MonevMap() {
   });
 
   const center = useMemo<[number, number]>(
-    () => [disasterCenter[0], disasterCenter[1]],
-    [disasterCenter[0], disasterCenter[1]]
+    () => [centerLat, centerLon],
+    [centerLat, centerLon]
   );
   const zoom = useMemo(() => (selectedKelurahan ? 12 : 5), [selectedKelurahan]);
 
-  /* fetch gunung + gempa, refresh tiap 60 detik */
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
-        if (cancelled) return;
-        setVolcanoes((vRes.error ? [] : vRes.volcanoes) || []);
-        const rawEqs = bRes.error
-          ? []
-          : [bRes.latest, ...(bRes.felt || [])].filter(
-              (e): e is Earthquake => e != null && e.coordinates != null
-            );
-        const seen = new Set<string>();
-        setEarthquakes(
-          rawEqs.filter((e) => {
-            const k = e.timestamp || `${e.coordinates?.join(",")}-${e.magnitude}`;
-            if (seen.has(k)) return false;
-            seen.add(k);
-            return true;
-          })
+  const load = async () => {
+    try {
+      const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
+      setVolcanoes((vRes.error ? [] : vRes.volcanoes) || []);
+      const rawEqs = bRes.error
+        ? []
+        : [bRes.latest, ...(bRes.felt || [])].filter(
+          (e): e is Earthquake => e != null && e.coordinates != null
         );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      const seen = new Set<string>();
+      setEarthquakes(
+        rawEqs.filter((e) => {
+          const k = e.timestamp || `${e.coordinates?.join(",")}-${e.magnitude}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+      );
+    } finally {
+      setLoading(false);
     }
-    load();
-    const interval = setInterval(load, 60000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
+  };
 
-  /* angin real-time di pusat pantauan */
-  useEffect(() => {
-    fetchWind(center[0], center[1])
-      .then(setWind)
-      .catch(() => setWind(null));
-  }, [center[0], center[1]]);
+  const isAlertActive =
+    volcanoes.some((volcano) => volcano.level >= 3) ||
+    earthquakes.some((earthquake) => (earthquake.magnitude ?? 0) >= 5.5);
+
+  useSmartPolling(load, {
+    stableIntervalMs: 300000,
+    alertIntervalMs: 60000,
+    isAlertActive,
+  });
+
+  const loadWind = async () => {
+    setWind(await fetchWind(center[0], center[1]));
+  };
+
+  useSmartPolling(loadWind, {
+    stableIntervalMs: 300000,
+    refreshKey: `${center[0]},${center[1]}`,
+  });
 
   /* getar peta saat ada gempa baru >= 4.5 */
   useEffect(() => {
@@ -645,11 +649,10 @@ export default function MonevMap() {
                   key={p}
                   type="button"
                   onClick={() => setTileProvider(p)}
-                  className={`rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${
-                    tileProvider === p
+                  className={`rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${tileProvider === p
                       ? "bg-accent/15 text-accent"
                       : "bg-white/5 text-fg-muted hover:text-fg"
-                  }`}
+                    }`}
                 >
                   {p === "esri-sat" ? "Satelit" : p === "osm" ? "Standar" : "Jalan"}
                 </button>
@@ -694,11 +697,10 @@ export default function MonevMap() {
                   key={dir}
                   onClick={() => setAshDirection(dir)}
                   type="button"
-                  className={`min-w-0 rounded-lg px-1 py-1.5 text-[9px] font-semibold transition-all ${
-                    ashDirection === dir
+                  className={`min-w-0 rounded-lg px-1 py-1.5 text-[9px] font-semibold transition-all ${ashDirection === dir
                       ? "bg-accent text-bg font-bold shadow-[0_0_12px_var(--glow)]"
                       : "text-fg hover:bg-white/5"
-                  }`}
+                    }`}
                 >
                   {dir === "AUTO" ? "Auto" : dir}
                 </button>
@@ -732,17 +734,15 @@ export default function MonevMap() {
                 key={l.key}
                 type="button"
                 onClick={() => toggle(l.key)}
-                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  layers[l.key]
+                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${layers[l.key]
                     ? "bg-accent/15 text-accent"
                     : "bg-white/5 text-fg-muted hover:text-fg"
-                }`}
+                  }`}
               >
                 {l.label}
                 <span
-                  className={`h-2 w-2 rounded-full ${
-                    layers[l.key] ? "bg-accent" : "bg-white/20"
-                  }`}
+                  className={`h-2 w-2 rounded-full ${layers[l.key] ? "bg-accent" : "bg-white/20"
+                    }`}
                 />
               </button>
             ))}
@@ -771,38 +771,38 @@ export default function MonevMap() {
         </button>
       )}
       {legendOpen && (
-      <div className="absolute bottom-3 left-3 z-[500] space-y-1 rounded-xl glass-panel px-3 py-2 text-[10px] shadow-lg">
-        <div className="flex items-center justify-between gap-3">
-          <p className="font-bold text-fg">Legenda</p>
-          <button
-            type="button"
-            onClick={() => setLegendOpen(false)}
-            aria-label="Sembunyikan legenda"
-            className="grid h-5 w-5 place-items-center rounded-md text-fg-muted hover:bg-white/10 hover:text-fg"
-          >
-            <X className="h-3 w-3" />
-          </button>
+        <div className="absolute bottom-3 left-3 z-[500] space-y-1 rounded-xl glass-panel px-3 py-2 text-[10px] shadow-lg">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold text-fg">Legenda</p>
+            <button
+              type="button"
+              onClick={() => setLegendOpen(false)}
+              aria-label="Sembunyikan legenda"
+              className="grid h-5 w-5 place-items-center rounded-md text-fg-muted hover:bg-white/10 hover:text-fg"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <Flame className="h-3 w-3 text-orange-400" /> Gunung (warna = status)
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <Activity className="h-3 w-3 text-orange-500" /> Ring gempa ∝ magnitude
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <Wind className="h-3 w-3 text-sky-400" /> Aliran angin real-time
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-purple-500/40" />
+            Kerucut = sebaran abu
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <Route className="h-3 w-3 text-emerald-400" /> Jalur evakuasi
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <MapPin className="h-3 w-3 text-yellow-400" /> Lokasi kamu
+          </p>
         </div>
-        <p className="flex items-center gap-1.5 text-fg-muted">
-          <Flame className="h-3 w-3 text-orange-400" /> Gunung (warna = status)
-        </p>
-        <p className="flex items-center gap-1.5 text-fg-muted">
-          <Activity className="h-3 w-3 text-orange-500" /> Ring gempa ∝ magnitude
-        </p>
-        <p className="flex items-center gap-1.5 text-fg-muted">
-          <Wind className="h-3 w-3 text-sky-400" /> Aliran angin real-time
-        </p>
-        <p className="flex items-center gap-1.5 text-fg-muted">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-purple-500/40" />
-          Kerucut = sebaran abu
-        </p>
-        <p className="flex items-center gap-1.5 text-fg-muted">
-          <Route className="h-3 w-3 text-emerald-400" /> Jalur evakuasi
-        </p>
-        <p className="flex items-center gap-1.5 text-fg-muted">
-          <MapPin className="h-3 w-3 text-yellow-400" /> Lokasi kamu
-        </p>
-      </div>
       )}
 
       {loading && (

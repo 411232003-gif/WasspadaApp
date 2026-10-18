@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
@@ -138,9 +139,12 @@ export function ProfileForm() {
           className="relative mx-auto block h-24 w-24 overflow-hidden rounded-full border-2 border-accent/40 bg-accent/10 shadow-[0_8px_24px_var(--glow)] transition-transform hover:scale-105"
         >
           {shownPhoto ? (
-            <img
+            <Image
               src={shownPhoto}
               alt="Foto profil"
+              width={96}
+              height={96}
+              unoptimized
               className="h-full w-full object-cover"
             />
           ) : (

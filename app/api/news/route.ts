@@ -1,6 +1,4 @@
-import { NextResponse } from "next/server";
-
-export const revalidate = 300;
+import { cachedJsonResponse } from "@/lib/api-cache";
 
 export type NewsSource = "petabencana" | "bluesky" | "gdacs" | "reliefweb";
 
@@ -236,7 +234,7 @@ async function fetchReliefWeb(): Promise<NewsItem[]> {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const settled = await Promise.allSettled([
     fetchPetaBencana(),
     fetchGdacs(),
@@ -275,9 +273,11 @@ export async function GET() {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  return NextResponse.json({
+  const payload = {
     items,
     sources,
     updatedAt: new Date().toISOString(),
-  });
+  };
+
+  return cachedJsonResponse(request, "news", payload, { items, sources });
 }
