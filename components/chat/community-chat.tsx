@@ -1,228 +1,84 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  Heart,
-  ImageOff,
-  ImagePlus,
   Loader2,
   Lock,
   LogIn,
   MessageCircle,
-  Send,
+  MessagesSquare,
   UserPlus,
   Users,
-  X,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
+import {
+  ChatRoom,
+  formatChatTime,
+} from "@/components/chat/chat-room";
+import {
+  CreateGroupDialog,
+  GroupInfoDialog,
+} from "@/components/chat/group-dialogs";
 import { useAuthUser } from "@/lib/auth";
 import {
-  sendChatMessage,
-  subscribeChatMessages,
-  toggleChatLike,
+  addGroupMembers,
+  createChatGroup,
+  deleteChatGroup,
+  deleteChatMessage,
+  deleteGroupMessage,
+  editChatMessage,
+  editGroupMessage,
+  fetchOlderChatMessages,
   getFirebaseStatus,
+  joinChatGroup,
+  removeGroupMember,
+  renameChatGroup,
+  resetGroupInvite,
+  sendChatMessage,
+  sendGroupMessage,
+  setGroupMemberRole,
+  subscribeChatGroups,
+  subscribeChatMessages,
+  subscribeGroupMessages,
+  toggleChatLike,
+  toggleGroupMessageLike,
+  ChatGroupDoc,
   ChatMessageDoc,
+  ChatPageMeta,
+  GroupMemberCandidate,
 } from "@/lib/firestore";
 import {
   cleanupExpiredChatImages,
   isSupabaseConfigured,
   uploadChatImage,
 } from "@/lib/supabase";
-import { Timestamp } from "firebase/firestore";
+import { listProfiles } from "@/lib/profile";
 
 const NAME_KEY = "wasspada-chat-name";
+const PUBLIC_ROOM = "public";
 
-function defaultName() {
-  return `Warga-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+function readSavedName() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(NAME_KEY);
 }
 
-function formatTime(value: Timestamp | number | null) {
-  if (!value) return "";
-  const date =
-    typeof value === "number"
-      ? new Date(value)
-      : (value as unknown as { toDate: () => Date }).toDate();
-  return date.toLocaleString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "short",
-  });
+function messageMillis(m: ChatMessageDoc): number {
+  const v = m.createdAt;
+  if (!v) return 0;
+  return typeof v === "number" ? v : v.toMillis();
 }
 
-function msgMillis(value: ChatMessageDoc["createdAt"]) {
-  if (!value) return 0;
-  if (typeof value === "number") return value;
-  const d = (value as unknown as { toDate?: () => Date }).toDate?.();
-  return d ? d.getTime() : 0;
-}
-
-function ChatImage({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <p className="mt-1.5 flex items-center gap-1.5 rounded-xl border border-card-border bg-black/20 px-3 py-2 text-[11px] italic text-fg-muted">
-        <ImageOff className="h-3.5 w-3.5" />
-        Foto kedaluwarsa (otomatis dihapus setelah 5 hari)
-      </p>
-    );
-  }
-  return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-1.5 block"
-    >
-      <Image
-        src={src}
-        alt="Foto dari chat"
-        width={960}
-        height={720}
-        sizes="(max-width: 640px) 100vw, 640px"
-        className="max-h-64 max-w-full w-auto rounded-xl border border-card-border object-cover"
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
-    </a>
-  );
-}
-
-interface ComposerProps {
-  text: string;
-  onTextChange: (value: string) => void;
-  image: File | null;
-  onImageChange: (file: File | null) => void;
-  onSend: () => void;
-  sending: boolean;
-  disabled: boolean;
-  placeholder: string;
-  compact?: boolean;
-}
-
-function Composer({
-  text,
-  onTextChange,
-  image,
-  onImageChange,
-  onSend,
-  sending,
-  disabled,
-  placeholder,
-  compact,
-}: ComposerProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const preview = useMemo(
-    () => (image ? URL.createObjectURL(image) : null),
-    [image]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
-
-  const pad = compact ? "p-2" : "p-3";
-  const inputPad = compact ? "px-3 py-2 text-xs" : "px-3.5 py-2.5 text-sm";
-
-  return (
-    <div className={compact ? "" : `border-t border-card-border ${pad}`}>
-      {preview && (
-        <div className="relative mb-2 inline-block">
-          <Image
-            src={preview}
-            alt="Lampiran"
-            width={320}
-            height={320}
-            unoptimized
-            className="h-20 rounded-xl border border-card-border object-cover"
-          />
-          <button
-            type="button"
-            onClick={() => onImageChange(null)}
-            aria-label="Hapus foto"
-            className="absolute -right-2 -top-2 rounded-full bg-black/70 p-1 text-white"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSend();
-        }}
-        className="flex items-center gap-2"
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            onImageChange(e.target.files?.[0] ?? null);
-            e.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={disabled || sending}
-          aria-label="Lampirkan foto"
-          title="Kirim foto"
-          className={`rounded-xl bg-white/5 text-fg-muted hover:text-accent disabled:opacity-50 ${compact ? "p-2" : "p-2.5"
-            }`}
-        >
-          <ImagePlus className={compact ? "h-4 w-4" : "h-5 w-5"} />
-        </button>
-        <input
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          maxLength={500}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          className={`flex-1 rounded-xl border border-card-border bg-card/50 text-fg outline-none placeholder:text-fg-muted focus:border-accent ${inputPad}`}
-        />
-        <button
-          type="submit"
-          disabled={(!text.trim() && !image) || sending || disabled}
-          className={`flex items-center gap-1.5 rounded-xl bg-accent/15 font-bold text-accent hover:bg-accent/25 disabled:opacity-50 ${compact ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm"
-            }`}
-        >
-          {sending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-          {!compact && <span className="hidden sm:inline">Kirim</span>}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function ChatAvatar({ src, name }: { src?: string; name: string }) {
-  const [failed, setFailed] = useState(false);
-  if (src && !failed) {
-    return (
-      <Image
-        src={src}
-        alt={name}
-        width={24}
-        height={24}
-        unoptimized
-        onError={() => setFailed(true)}
-        className="h-6 w-6 shrink-0 rounded-full border border-card-border object-cover"
-      />
-    );
-  }
-  return (
-    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/20 text-[10px] font-bold text-accent">
-      {(name || "?").slice(0, 1).toUpperCase()}
-    </span>
+/** Gabung halaman pesan lama + live, dedupe by id, urut naik. */
+function mergePages(
+  older: ChatMessageDoc[],
+  latest: ChatMessageDoc[]
+): ChatMessageDoc[] {
+  const map = new Map<string, ChatMessageDoc>();
+  for (const m of older) map.set(m.id, m);
+  for (const m of latest) map.set(m.id, m);
+  return [...map.values()].sort(
+    (a, b) => messageMillis(a) - messageMillis(b)
   );
 }
 
@@ -230,217 +86,262 @@ export function CommunityChat() {
   const router = useRouter();
   const { user: account, loading: authLoading } = useAuthUser();
   const [messages, setMessages] = useState<ChatMessageDoc[]>([]);
-  const [text, setText] = useState("");
-  const [image, setImage] = useState<File | null>(null);
-  const [nameOverride, setNameOverride] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [openThread, setOpenThread] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState("");
-  const [replyImage, setReplyImage] = useState<File | null>(null);
-  const [replySending, setReplySending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [publicMeta, setPublicMeta] = useState<ChatPageMeta>({
+    hasMore: false,
+    oldest: null,
+  });
+  const [publicOlder, setPublicOlder] = useState<ChatMessageDoc[]>([]);
+  const [groups, setGroups] = useState<ChatGroupDoc[]>([]);
+  const [groupsReady, setGroupsReady] = useState(false);
+  const [groupMessages, setGroupMessages] = useState<ChatMessageDoc[]>([]);
+  const [groupMeta, setGroupMeta] = useState<ChatPageMeta>({
+    hasMore: false,
+    oldest: null,
+  });
+  const [groupOlder, setGroupOlder] = useState<ChatMessageDoc[]>([]);
+  const [sel, setSel] = useState<string | null>(null);
+  const [nameOverride, setNameOverride] = useState<string | null>(
+    readSavedName
+  );
+  const [createOpen, setCreateOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [profiles, setProfiles] = useState<GroupMemberCandidate[]>([]);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [shellError, setShellError] = useState<string | null>(null);
+  const joinHandled = useRef(false);
   const configured = getFirebaseStatus().configured;
   const supabaseReady = isSupabaseConfigured();
 
   const uid = account?.uid ?? null;
   const name =
-    nameOverride ??
-    account?.displayName ??
-    account?.email ??
-    "Anonim";
+    nameOverride ?? account?.displayName ?? account?.email ?? "Anonim";
+
+  const isGroupSel = sel !== null && sel !== PUBLIC_ROOM;
+  const activeGroup = isGroupSel
+    ? groups.find((g) => g.id === sel) ?? null
+    : null;
+  const isAdmin = uid != null && activeGroup?.roles?.[uid] === "admin";
 
   useEffect(() => {
     if (!account) return;
-    cleanupExpiredChatImages().catch(() => { });
-    return subscribeChatMessages(setMessages);
+    cleanupExpiredChatImages().catch(() => {});
+    const unsubs = [
+      subscribeChatMessages((msgs, meta) => {
+        setMessages(msgs);
+        setPublicMeta(meta);
+      }),
+      subscribeChatGroups(account.uid, (list) => {
+        setGroups(list);
+        setGroupsReady(true);
+      }),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, [account]);
 
-  const topLevel = useMemo(
-    () => messages.filter((m) => !m.parentId),
-    [messages]
-  );
-
-  const repliesByParent = useMemo(() => {
-    const map = new Map<string, ChatMessageDoc[]>();
-    for (const m of messages) {
-      if (!m.parentId) continue;
-      const list = map.get(m.parentId) ?? [];
-      list.push(m);
-      map.set(m.parentId, list);
-    }
-    for (const list of map.values()) {
-      list.sort((a, b) => msgMillis(a.createdAt) - msgMillis(b.createdAt));
-    }
-    return map;
-  }, [messages]);
+  /* reset riwayat halaman saat pindah room (pola render-adjust) */
+  const [prevSel, setPrevSel] = useState<string | null>(null);
+  if (sel !== prevSel) {
+    setPrevSel(sel);
+    setGroupOlder([]);
+  }
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [topLevel.length]);
+    if (!isGroupSel || !account) return;
+    return subscribeGroupMessages(sel as string, (msgs, meta) => {
+      setGroupMessages(msgs);
+      setGroupMeta(meta);
+    });
+  }, [sel, isGroupSel, account]);
+
+  const allPublicMessages = useMemo(
+    () => mergePages(publicOlder, messages),
+    [publicOlder, messages]
+  );
+  const allGroupMessages = useMemo(
+    () => mergePages(groupOlder, groupMessages),
+    [groupOlder, groupMessages]
+  );
+
+  const loadOlderPublic = async () => {
+    if (!publicMeta.oldest) return;
+    const page = await fetchOlderChatMessages({ before: publicMeta.oldest });
+    setPublicOlder((prev) => mergePages(page.messages, prev));
+    setPublicMeta(page.meta);
+  };
+
+  const loadOlderGroup = async () => {
+    if (!activeGroup || !groupMeta.oldest) return;
+    const page = await fetchOlderChatMessages({
+      groupId: activeGroup.id,
+      before: groupMeta.oldest,
+    });
+    setGroupOlder((prev) => mergePages(page.messages, prev));
+    setGroupMeta(page.meta);
+  };
+
+  /* grup dihapus/dikeluarkan saat sedang dibuka → kembali ke daftar
+     (pola render-adjust seperti di bottom-nav) */
+  if (isGroupSel && groupsReady && !activeGroup) {
+    setSel(null);
+    setInfoOpen(false);
+  }
+
+  /* daftar calon anggota dimuat saat dialog dibuka */
+  useEffect(() => {
+    if ((!createOpen && !infoOpen) || profilesLoaded) return;
+    listProfiles()
+      .then((list) => {
+        setProfiles(
+          list.map((p) => ({
+            uid: p.uid,
+            name: p.displayName || "Warga",
+            photoUrl: p.photoUrl,
+          }))
+        );
+        setProfilesLoaded(true);
+      })
+      .catch(() => setProfilesLoaded(true));
+  }, [createOpen, infoOpen, profilesLoaded]);
+
+  /* gabung grup lewat tautan undangan: /chat?join=<groupId> */
+  useEffect(() => {
+    if (!account || joinHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const joinId = params.get("join");
+    if (!joinId) return;
+    joinHandled.current = true;
+    joinChatGroup(
+      joinId,
+      account.displayName || account.email || "Warga",
+      account.photoURL ?? undefined,
+      params.get("code") ?? undefined
+    )
+      .then(() => setSel(joinId))
+      .catch((e) =>
+        setShellError(
+          e instanceof Error ? e.message : "Gagal bergabung ke grup."
+        )
+      )
+      .finally(() => {
+        window.history.replaceState(null, "", window.location.pathname);
+      });
+  }, [account]);
+
+  const candidates = useMemo(() => {
+    const map = new Map<string, GroupMemberCandidate>();
+    for (const p of profiles) map.set(p.uid, p);
+    for (const m of messages) {
+      if (!map.has(m.userId) && m.userId) {
+        map.set(m.userId, {
+          uid: m.userId,
+          name: m.name || "Warga",
+          photoUrl: m.photoUrl,
+        });
+      }
+    }
+    for (const g of groups) {
+      for (const [mid, info] of Object.entries(g.members ?? {})) {
+        if (!map.has(mid)) {
+          map.set(mid, { uid: mid, name: info.name, photoUrl: info.photoUrl });
+        }
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [profiles, messages, groups]);
 
   const updateName = (value: string) => {
     setNameOverride(value);
-    localStorage.setItem(NAME_KEY, value || defaultName());
+    localStorage.setItem(NAME_KEY, value);
   };
 
-  const send = async () => {
-    const trimmed = text.trim();
-    if ((!trimmed && !image) || sending) return;
-    setSending(true);
-    setError(null);
+  const nameInput = (
+    <input
+      value={name}
+      onChange={(e) => updateName(e.target.value)}
+      maxLength={40}
+      placeholder="Nama kamu"
+      aria-label="Nama tampilan"
+      className="w-24 shrink-0 rounded-lg border border-card-border bg-card/50 px-2.5 py-1.5 text-xs text-fg outline-none focus:border-accent sm:w-40"
+    />
+  );
+
+  /* ===== handler chat publik ===== */
+  const sendPublic = async (text: string, image: File | null) => {
+    const imageUrl = image ? await uploadChatImage(image) : undefined;
+    await sendChatMessage(text, name.trim() || "Anonim", {
+      imageUrl,
+      photoUrl: account?.photoURL ?? undefined,
+    });
+  };
+
+  const replyPublic = async (
+    parent: ChatMessageDoc,
+    text: string,
+    image: File | null
+  ) => {
+    const imageUrl = image ? await uploadChatImage(image) : undefined;
+    await sendChatMessage(text, name.trim() || "Anonim", {
+      imageUrl,
+      photoUrl: account?.photoURL ?? undefined,
+      parentId: parent.id,
+      parentName: parent.name,
+      parentText: parent.text.slice(0, 80),
+    });
+  };
+
+  /* ===== handler grup ===== */
+  const sendGroup = async (text: string, image: File | null) => {
+    if (!activeGroup) return;
+    const imageUrl = image ? await uploadChatImage(image) : undefined;
+    await sendGroupMessage(activeGroup.id, text, name.trim() || "Anonim", {
+      imageUrl,
+      photoUrl: account?.photoURL ?? undefined,
+    });
+  };
+
+  const replyGroup = async (
+    parent: ChatMessageDoc,
+    text: string,
+    image: File | null
+  ) => {
+    if (!activeGroup) return;
+    const imageUrl = image ? await uploadChatImage(image) : undefined;
+    await sendGroupMessage(activeGroup.id, text, name.trim() || "Anonim", {
+      imageUrl,
+      photoUrl: account?.photoURL ?? undefined,
+      parentId: parent.id,
+      parentName: parent.name,
+      parentText: parent.text.slice(0, 80),
+    });
+  };
+
+  /* ===== aksi grup (admin/anggota) ===== */
+  const run = async (fn: () => Promise<unknown>) => {
+    if (busy) return;
+    setBusy(true);
+    setShellError(null);
     try {
-      const imageUrl = image ? await uploadChatImage(image) : undefined;
-      await sendChatMessage(trimmed, name.trim() || "Anonim", {
-        imageUrl,
-        photoUrl: account?.photoURL ?? undefined,
-      });
-      setText("");
-      setImage(null);
+      await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal mengirim pesan");
+      setShellError(
+        e instanceof Error ? e.message : "Aksi gagal. Coba lagi."
+      );
     } finally {
-      setSending(false);
+      setBusy(false);
     }
   };
 
-  const sendReply = async (parent: ChatMessageDoc) => {
-    const trimmed = replyText.trim();
-    if ((!trimmed && !replyImage) || replySending) return;
-    setReplySending(true);
-    setError(null);
-    try {
-      const imageUrl = replyImage
-        ? await uploadChatImage(replyImage)
-        : undefined;
-      await sendChatMessage(trimmed, name.trim() || "Anonim", {
-        imageUrl,
-        photoUrl: account?.photoURL ?? undefined,
-        parentId: parent.id,
-        parentName: parent.name,
-        parentText: parent.text.slice(0, 80),
-      });
-      setReplyText("");
-      setReplyImage(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal mengirim balasan");
-    } finally {
-      setReplySending(false);
-    }
-  };
-
-  const toggleLike = async (msg: ChatMessageDoc) => {
-    if (!uid) return;
-    try {
-      await toggleChatLike(msg.id, msg.likes ?? [], uid);
-    } catch {
-      setError("Gagal memberi like. Coba lagi.");
-    }
-  };
-
-  const renderBubble = (msg: ChatMessageDoc, isReply = false) => {
-    const own = uid != null && msg.userId === uid;
-    const likes = msg.likes ?? [];
-    const liked = uid != null && likes.includes(uid);
-    const replies = repliesByParent.get(msg.id) ?? [];
-    const threadOpen = openThread === msg.id;
-
-    return (
-      <div
-        key={msg.id}
-        className={`flex flex-col ${own ? "items-end" : "items-start"}`}
-      >
-        <div
-          className={`${isReply
-              ? "max-w-[90%] rounded-2xl rounded-bl-sm bg-white/5 px-3 py-2"
-              : `max-w-[80%] rounded-2xl px-3.5 py-2 sm:max-w-[65%] ${own
-                ? "rounded-br-sm bg-accent/15 border border-accent/40"
-                : "rounded-bl-sm bg-white/5 border border-card-border"
-              }`
-            }`}
-          style={
-            own && !isReply ? { boxShadow: "0 0 12px var(--glow)" } : undefined
-          }
-        >
-          <p
-            className={`flex items-center gap-1.5 text-[10px] font-bold ${own ? "text-accent" : "text-fg-muted"
-              }`}
-          >
-            <ChatAvatar src={msg.photoUrl} name={msg.name} />
-            {own ? "Kamu" : msg.name || "Anonim"}
-          </p>
-          {msg.parentName && !isReply && (
-            <p className="mt-0.5 truncate text-[10px] italic text-fg-muted">
-              Membalas {msg.parentName}: “{msg.parentText}”
-            </p>
-          )}
-          {msg.imageUrl && <ChatImage src={msg.imageUrl} />}
-          {msg.text && (
-            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-fg">
-              {msg.text}
-            </p>
-          )}
-
-          {!isReply && (
-            <div className="mt-1.5 flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => toggleLike(msg)}
-                disabled={!uid}
-                aria-label="Sukai pesan"
-                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${liked ? "text-red-400" : "text-fg-muted hover:text-red-400"
-                  }`}
-              >
-                <Heart
-                  className={`h-3.5 w-3.5 ${liked ? "fill-red-400" : ""}`}
-                />
-                {likes.length > 0 ? likes.length : ""}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenThread(threadOpen ? null : msg.id);
-                  setReplyText("");
-                  setReplyImage(null);
-                }}
-                aria-label="Komentar"
-                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${threadOpen ? "text-accent" : "text-fg-muted hover:text-accent"
-                  }`}
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                {replies.length > 0 ? replies.length : ""}
-              </button>
-            </div>
-          )}
-        </div>
-        <span className="mt-1 px-1 text-[9px] text-fg-muted">
-          {formatTime(msg.createdAt)}
-        </span>
-
-        {!isReply && threadOpen && (
-          <div className="mt-1 w-[92%] space-y-2 rounded-xl border border-card-border bg-black/20 p-2.5 sm:w-[80%]">
-            {replies.map((r) => renderBubble(r, true))}
-            <Composer
-              compact
-              text={replyText}
-              onTextChange={setReplyText}
-              image={replyImage}
-              onImageChange={setReplyImage}
-              onSend={() => sendReply(msg)}
-              sending={replySending}
-              disabled={!configured}
-              placeholder={`Balas ${msg.name}...`}
-            />
-          </div>
-        )}
-      </div>
-    );
-  };
+  const handleCreate = (groupName: string, members: GroupMemberCandidate[]) =>
+    run(async () => {
+      const id = await createChatGroup(groupName, members);
+      setCreateOpen(false);
+      setSel(id);
+    });
 
   if (authLoading) {
     return (
-      <GlassCard className="flex h-[60vh] md:h-[calc(100vh-11rem)] min-h-[420px] items-center justify-center">
+      <GlassCard className="flex h-[65dvh] md:h-[calc(100dvh-11rem)] min-h-[460px] items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-accent" />
       </GlassCard>
     );
@@ -448,20 +349,20 @@ export function CommunityChat() {
 
   if (!account) {
     return (
-      <GlassCard className="flex h-[60vh] md:h-[calc(100vh-11rem)] min-h-[420px] flex-col items-center justify-center gap-4 p-8 text-center">
+      <GlassCard className="flex h-[65dvh] md:h-[calc(100dvh-11rem)] min-h-[460px] flex-col items-center justify-center gap-4 p-8 text-center">
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 text-accent shadow-[0_8px_20px_var(--glow)]">
           <Lock className="h-7 w-7" />
         </span>
         <div>
           <h3 className="text-base font-bold text-fg">
-            Chat Publik Khusus Anggota
+            Chat Publik & Grup Khusus Anggota
           </h3>
           <p className="mt-1.5 max-w-sm text-sm text-fg-muted">
-            Masuk atau daftar akun terlebih dahulu untuk membaca dan mengirim
-            pesan di chat publik.
+            Masuk atau daftar akun terlebih dahulu untuk membaca, mengirim
+            pesan, dan membuat grup seperti di WhatsApp.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           <button
             type="button"
             onClick={() => router.push("/login")}
@@ -484,61 +385,253 @@ export function CommunityChat() {
   }
 
   return (
-    <GlassCard className="flex h-[60vh] md:h-[calc(100vh-11rem)] min-h-[420px] flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-card-border p-4">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="h-5 w-5 text-accent" />
-          <h3 className="text-sm font-semibold text-fg">Chat Publik</h3>
-          <span className="inline-flex items-center rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-bold text-accent">
-            <Users className="mr-1 h-3 w-3" />
-            Semua Pengguna
-          </span>
-        </div>
-        <input
-          value={name}
-          onChange={(e) => updateName(e.target.value)}
-          maxLength={40}
-          placeholder="Nama kamu"
-          aria-label="Nama tampilan"
-          className="w-32 rounded-lg border border-card-border bg-card/50 px-2.5 py-1.5 text-xs text-fg outline-none focus:border-accent sm:w-40"
-        />
+    <>
+      <div className="grid h-[65dvh] min-h-[460px] gap-3 md:h-[calc(100dvh-11rem)] md:grid-cols-[280px_minmax(0,1fr)]">
+        {/* ===== daftar percakapan ===== */}
+        <aside
+          className={`min-h-0 flex-col ${
+            sel === null ? "flex" : "hidden md:flex"
+          }`}
+        >
+          <GlassCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-2 border-b border-card-border p-3">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-accent" />
+                <h3 className="text-sm font-semibold text-fg">Obrolan</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-xs font-bold text-accent hover:bg-accent/25"
+              >
+                <Users className="h-4 w-4" />
+                Grup Baru
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2 [scrollbar-width:thin]">
+              <button
+                type="button"
+                onClick={() => setSel(PUBLIC_ROOM)}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                  sel === PUBLIC_ROOM
+                    ? "bg-accent/10 ring-1 ring-accent/40"
+                    : "hover:bg-white/5"
+                }`}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+                  <MessagesSquare className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-fg">
+                    Chat Publik
+                  </span>
+                  <span className="block truncate text-[11px] text-fg-muted">
+                    Semua warga WasspadaApp
+                  </span>
+                </span>
+              </button>
+
+              {groups.map((g) => {
+                const myRole = uid ? g.roles?.[uid] : undefined;
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setSel(g.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                      sel === g.id
+                        ? "bg-accent/10 ring-1 ring-accent/40"
+                        : "hover:bg-white/5"
+                    }`}
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-secondary/15 text-accent-secondary">
+                      <Users className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-fg">
+                          {g.name}
+                        </span>
+                        {myRole === "admin" && (
+                          <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[8px] font-bold uppercase text-accent">
+                            Admin
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-[11px] text-fg-muted">
+                        {g.lastMessageText
+                          ? `${g.lastMessageName}: ${g.lastMessageText}`
+                          : `${g.memberIds?.length ?? 0} anggota`}
+                      </span>
+                    </span>
+                    {g.lastMessageAt && (
+                      <span className="shrink-0 self-start pt-0.5 text-[9px] text-fg-muted">
+                        {formatChatTime(g.lastMessageAt)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {groups.length === 0 && (
+                <p className="px-3 py-4 text-center text-[11px] text-fg-muted">
+                  Belum ada grup. Buat grup untuk koordinasi RT/RW seperti di
+                  WhatsApp.
+                </p>
+              )}
+            </div>
+          </GlassCard>
+        </aside>
+
+        {/* ===== ruang chat ===== */}
+        <section
+          className={`min-h-0 min-w-0 flex-col ${
+            sel === null ? "hidden md:flex" : "flex"
+          }`}
+        >
+          {sel === PUBLIC_ROOM && (
+            <ChatRoom
+              uid={uid!}
+              messages={allPublicMessages}
+              hasMore={publicMeta.hasMore}
+              onLoadOlder={loadOlderPublic}
+              title="Chat Publik"
+              subtitle="Semua pengguna WasspadaApp"
+              badge={
+                <span className="inline-flex shrink-0 items-center rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-bold text-accent">
+                  <Users className="mr-1 h-3 w-3" />
+                  Publik
+                </span>
+              }
+              headerRight={nameInput}
+              onBack={() => setSel(null)}
+              placeholder="Tulis pesan untuk semua pengguna..."
+              emptyText="Belum ada pesan. Jadilah yang pertama menyapa!"
+              configured={configured}
+              supabaseReady={supabaseReady}
+              canDelete={(m) => m.userId === uid}
+              onSend={sendPublic}
+              onReply={replyPublic}
+              onToggleLike={(m) => toggleChatLike(m.id, m.likes ?? [], uid!)}
+              onEdit={(m, t) => editChatMessage(m.id, t)}
+              onDelete={(m) => deleteChatMessage(m.id)}
+            />
+          )}
+
+          {sel !== PUBLIC_ROOM && activeGroup && (
+            <ChatRoom
+              uid={uid!}
+              messages={allGroupMessages}
+              hasMore={groupMeta.hasMore}
+              onLoadOlder={loadOlderGroup}
+              title={activeGroup.name}
+              subtitle={`${activeGroup.memberIds?.length ?? 0} anggota${
+                isAdmin ? " · kamu admin" : ""
+              }`}
+              badge={
+                <span className="inline-flex shrink-0 items-center rounded-full bg-accent-secondary/10 px-2 py-0.5 text-[10px] font-bold text-accent-secondary">
+                  <Users className="mr-1 h-3 w-3" />
+                  Grup
+                </span>
+              }
+              headerRight={nameInput}
+              onBack={() => setSel(null)}
+              onOpenInfo={() => setInfoOpen(true)}
+              placeholder={`Pesan ke ${activeGroup.name}...`}
+              emptyText="Belum ada pesan di grup ini. Mulai percakapan!"
+              configured={configured}
+              supabaseReady={supabaseReady}
+              canDelete={(m) => m.userId === uid || isAdmin}
+              onSend={sendGroup}
+              onReply={replyGroup}
+              onToggleLike={(m) =>
+                toggleGroupMessageLike(activeGroup.id, m.id, m.likes ?? [], uid!)
+              }
+              onEdit={(m, t) => editGroupMessage(activeGroup.id, m.id, t)}
+              onDelete={(m) => deleteGroupMessage(activeGroup.id, m.id)}
+            />
+          )}
+
+          {sel === null && (
+            <GlassCard className="hidden min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center md:flex">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 text-accent shadow-[0_8px_20px_var(--glow)]">
+                <MessagesSquare className="h-7 w-7" />
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-fg">
+                  Pilih percakapan
+                </h3>
+                <p className="mt-1 max-w-xs text-sm text-fg-muted">
+                  Buka Chat Publik atau salah satu grup di sebelah kiri untuk
+                  mulai berdiskusi.
+                </p>
+              </div>
+            </GlassCard>
+          )}
+        </section>
       </div>
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-        {!configured && (
-          <p className="rounded-lg bg-yellow-500/10 p-3 text-center text-xs text-yellow-400">
-            Layanan chat sedang tidak aktif. Silakan coba lagi nanti.
-          </p>
-        )}
-        {configured && !supabaseReady && (
-          <p className="rounded-lg bg-yellow-500/10 p-3 text-center text-xs text-yellow-400">
-            Fitur kirim foto sedang nonaktif — kirim teks tetap bisa digunakan.
-          </p>
-        )}
-        {configured && topLevel.length === 0 && (
-          <p className="py-10 text-center text-sm text-fg-muted">
-            Belum ada pesan. Jadilah yang pertama menyapa!
-          </p>
-        )}
-        {topLevel.map((msg) => renderBubble(msg))}
-      </div>
-
-      {error && (
-        <p className="mx-4 mb-2 rounded-lg bg-red-500/10 p-2 text-xs text-red-400">
-          {error}
+      {shellError && (
+        <p className="mt-2 rounded-lg bg-red-500/10 p-2 text-xs text-red-400">
+          {shellError}
         </p>
       )}
 
-      <Composer
-        text={text}
-        onTextChange={setText}
-        image={image}
-        onImageChange={setImage}
-        onSend={send}
-        sending={sending}
-        disabled={!configured}
-        placeholder="Tulis pesan untuk semua pengguna..."
-      />
-    </GlassCard>
+      {createOpen && (
+        <CreateGroupDialog
+          candidates={candidates}
+          selfUid={account.uid}
+          busy={busy}
+          onClose={() => setCreateOpen(false)}
+          onCreate={handleCreate}
+        />
+      )}
+
+      {infoOpen && activeGroup && (
+        <GroupInfoDialog
+          group={activeGroup}
+          selfUid={account.uid}
+          candidates={candidates}
+          busy={busy}
+          onClose={() => setInfoOpen(false)}
+          onRename={(n) =>
+            run(() => renameChatGroup(activeGroup.id, n))
+          }
+          onToggleRole={(target, makeAdmin) =>
+            run(() =>
+              setGroupMemberRole(
+                activeGroup.id,
+                target,
+                makeAdmin ? "admin" : "member"
+              )
+            )
+          }
+          onRemove={(target) =>
+            run(() => removeGroupMember(activeGroup.id, target))
+          }
+          onAdd={(members) =>
+            run(() => addGroupMembers(activeGroup.id, members))
+          }
+          onLeave={() =>
+            run(async () => {
+              await removeGroupMember(activeGroup.id, account.uid);
+              setInfoOpen(false);
+              setSel(null);
+            })
+          }
+          onDisband={() =>
+            run(async () => {
+              await deleteChatGroup(activeGroup.id);
+              setInfoOpen(false);
+              setSel(null);
+            })
+          }
+          onResetInvite={() =>
+            run(() => resetGroupInvite(activeGroup.id))
+          }
+        />
+      )}
+    </>
   );
 }

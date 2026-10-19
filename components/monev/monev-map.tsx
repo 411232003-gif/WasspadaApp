@@ -106,8 +106,12 @@ function getKelurahanIcon() {
   });
 }
 
-function getFireIcon(confidence: FireConfidence) {
-  const level = confidence === "reported" ? "reported" : confidence;
+function getFireIcon(confidence: FireConfidence, verified: boolean) {
+  const level = verified
+    ? "verified"
+    : confidence === "reported"
+      ? "reported"
+      : confidence;
   return L.divIcon({
     className: "fire-marker-icon",
     html: `<span class="fire-marker fire-marker-${level}" aria-hidden="true"><span class="fire-marker-pulse"></span><span class="fire-marker-flame">🔥</span></span>`,
@@ -121,6 +125,111 @@ function confidenceLabel(confidence: FireConfidence) {
   if (confidence === "high") return "Keyakinan tinggi";
   if (confidence === "medium") return "Keyakinan sedang";
   return "Keyakinan rendah";
+}
+
+/* cache nama tempat hasil reverse-geocode (per ~100 m grid) */
+const placeCache = new Map<string, string | null>();
+
+/** Konten popup titik api: status verifikasi, nama lokasi, link Google Maps.
+ *  Reverse geocode dilakukan lazy — hanya saat popup dibuka — agar
+ *  mematuhi rate limit Nominatim (maks 1 req/detik). */
+function FirePopupContent({ detection }: { detection: FireDetection }) {
+  const [lat, lon] = detection.coordinates;
+  const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const [place, setPlace] = useState<string | null>(
+    () => placeCache.get(cacheKey) ?? null
+  );
+  const [placeLoading, setPlaceLoading] = useState(
+    () => !placeCache.has(cacheKey)
+  );
+
+  useEffect(() => {
+    if (placeCache.has(cacheKey)) return;
+    let alive = true;
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=id&zoom=14&lat=${lat}&lon=${lon}`
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const name =
+          typeof data?.display_name === "string"
+            ? data.display_name.split(",").slice(0, 3).join(",").trim()
+            : null;
+        placeCache.set(cacheKey, name);
+        if (alive) setPlace(name);
+      })
+      .catch(() => {
+        placeCache.set(cacheKey, null);
+      })
+      .finally(() => {
+        if (alive) setPlaceLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [lat, lon, cacheKey]);
+
+  const verified = (detection.verifiedBy?.length ?? 0) > 0;
+  const statusText = verified
+    ? "✓ Terkonfirmasi silang"
+    : detection.source === "NASA FIRMS"
+      ? "Indikasi satelit — perlu verifikasi lapangan"
+      : detection.source === "NASA EONET"
+        ? "Peristiwa kebakaran aktif (NASA EONET)"
+        : "Laporan warga — belum ada konfirmasi satelit";
+
+  return (
+    <div className="text-bg min-w-44">
+      <strong>{detection.title}</strong>
+      <br />
+      <b style={{ color: verified ? "#4ade80" : "#fbbf24" }}>{statusText}</b>
+      {verified && (
+        <>
+          <br />
+          <span style={{ fontSize: 10 }}>
+            Sesuai {detection.verifiedBy!.join(" + ")}
+            {detection.verifyDistanceKm != null &&
+              ` (~${detection.verifyDistanceKm.toFixed(1)} km)`}
+          </span>
+        </>
+      )}
+      <br />
+      {confidenceLabel(detection.confidence)}
+      <br />
+      {new Date(detection.detectedAt).toLocaleString("id-ID", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Jakarta",
+      })}
+      {detection.frp != null && (
+        <>
+          <br />
+          Daya radiasi: {detection.frp.toFixed(1)} MW
+        </>
+      )}
+      {detection.detail && (
+        <>
+          <br />
+          {detection.detail}
+        </>
+      )}
+      <br />
+      {placeLoading
+        ? "Mencari nama lokasi..."
+        : `Sekitar: ${place ?? "lokasi tidak dikenal"}`}
+      <br />
+      {lat.toFixed(4)}, {lon.toFixed(4)}
+      <br />
+      <a
+        href={`https://www.google.com/maps?q=${lat},${lon}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: "#38bdf8", fontWeight: 600 }}
+      >
+        Buka di Google Maps ↗
+      </a>
+    </div>
+  );
 }
 
 function windArrowIcon(degTo: number) {
@@ -455,38 +564,13 @@ export default function MonevMap() {
         <Marker
           key={detection.id}
           position={detection.coordinates}
-          icon={getFireIcon(detection.confidence)}
+          icon={getFireIcon(
+            detection.confidence,
+            (detection.verifiedBy?.length ?? 0) > 0
+          )}
         >
           <Popup>
-            <div className="text-bg min-w-40">
-              <strong>{detection.title}</strong>
-              <br />
-              {detection.source === "NASA FIRMS"
-                ? "Indikasi hotspot dari satelit; perlu verifikasi lapangan"
-                : "Laporan PetaBencana; belum terverifikasi"}
-              <br />
-              {confidenceLabel(detection.confidence)}
-              <br />
-              {new Date(detection.detectedAt).toLocaleString("id-ID", {
-                dateStyle: "medium",
-                timeStyle: "short",
-                timeZone: "Asia/Jakarta",
-              })}
-              {detection.frp != null && (
-                <>
-                  <br />
-                  Daya radiasi: {detection.frp.toFixed(1)} MW
-                </>
-              )}
-              {detection.detail && (
-                <>
-                  <br />
-                  {detection.detail}
-                </>
-              )}
-              <br />
-              {detection.coordinates[0].toFixed(4)}, {detection.coordinates[1].toFixed(4)}
-            </div>
+            <FirePopupContent detection={detection} />
           </Popup>
         </Marker>
       )),
@@ -913,6 +997,9 @@ export default function MonevMap() {
           </p>
           <p className="flex items-center gap-1.5 text-fg-muted">
             <Flame className="h-3 w-3 text-red-500" /> Api: merah tinggi/laporan, oranye sedang, kuning rendah
+          </p>
+          <p className="flex items-center gap-1.5 text-fg-muted">
+            <Flame className="h-3 w-3 text-emerald-500" /> Api hijau = terkonfirmasi silang multi-sumber
           </p>
           <p className="flex items-center gap-1.5 text-fg-muted">
             <Wind className="h-3 w-3 text-sky-400" /> Aliran angin real-time

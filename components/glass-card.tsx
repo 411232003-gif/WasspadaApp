@@ -9,7 +9,7 @@ interface GlassCardProps {
 export function GlassCard({ children, className = "", style }: GlassCardProps) {
   return (
     <div
-      className={`rounded-2xl glass-panel theme-transition ${className}`}
+      className={`min-w-0 rounded-2xl glass-panel theme-transition ${className}`}
       style={style}
     >
       {children}

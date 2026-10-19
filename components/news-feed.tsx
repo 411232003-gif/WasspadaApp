@@ -217,19 +217,23 @@ export function NewsFeed() {
                 </a>
               )}
 
-              <h3 className="text-sm font-semibold text-fg">{item.title}</h3>
+              <h3 className="text-sm font-semibold text-fg break-words">
+                {item.title}
+              </h3>
               {item.author && (
-                <p className="mt-0.5 text-[11px] font-medium text-accent">
+                <p className="mt-0.5 text-[11px] font-medium text-accent break-words">
                   {item.author}
                 </p>
               )}
               {item.text && (
-                <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed text-fg-muted">
+                <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap break-words text-xs leading-relaxed text-fg-muted">
                   {item.text}
                 </p>
               )}
               {item.meta && (
-                <p className="mt-2 text-[10px] text-fg-muted">{item.meta}</p>
+                <p className="mt-2 break-words text-[10px] text-fg-muted">
+                  {item.meta}
+                </p>
               )}
 
               <a

@@ -67,8 +67,8 @@ export default function RootLayout({
             <Header />
             <div className="relative flex flex-1">
               <Sidebar />
-              <main className="flex-1 md:pl-14 pb-20 md:pb-0">
-                <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+              <main className="min-w-0 flex-1 md:pl-14 pb-20 md:pb-0">
+                <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
                   {children}
                 </div>
               </main>

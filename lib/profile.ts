@@ -1,6 +1,15 @@
 "use client";
 
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { auth, db } from "./firebase";
 
@@ -11,6 +20,20 @@ export interface UserProfile {
 }
 
 const COLLECTION_PROFILES = "profiles";
+
+export interface ProfileEntry extends UserProfile {
+  uid: string;
+}
+
+export async function listProfiles(
+  limitCount = 200
+): Promise<ProfileEntry[]> {
+  if (!db) return [];
+  const snap = await getDocs(
+    query(collection(db, COLLECTION_PROFILES), limit(limitCount))
+  );
+  return snap.docs.map((d) => ({ uid: d.id, ...(d.data() as UserProfile) }));
+}
 
 export async function getUserProfile(
   uid: string

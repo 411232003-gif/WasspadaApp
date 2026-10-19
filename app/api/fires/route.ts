@@ -22,6 +22,15 @@ const INDONESIA_BBOX = "95,-11,141,6";
 const PETA_REPORTS_URL =
     "https://api.petabencana.id/reports?timeperiod=86400&format=json";
 const FIRMS_SOURCE = "VIIRS_SNPP_NRT";
+/* EONET bbox pakai urutan minLong,maxLat,maxLong,minLat — gratis tanpa key */
+const EONET_EVENTS_URL =
+    "https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&status=open&limit=50&bbox=95,6,141,-11";
+/* radius cross-verifikasi antar-sumber (km) */
+const VERIFY_RADIUS_KM: Record<string, number> = {
+    PetaBencana: 5, // laporan warga vs titik panas satelit (piksel VIIRS ~375 m)
+    "NASA FIRMS": 25, // hotspot vs area kejadian EONET (sentroid kasar)
+    "NASA EONET": 25,
+};
 
 function pointCoordinates(value: unknown): [number, number] | null {
     if (
@@ -162,14 +171,118 @@ async function fetchFirmsDetections(mapKey: string): Promise<FireDetection[]> {
     return parseFirmsCsv(await response.text());
 }
 
+interface EonetGeometry {
+    date?: string;
+    type?: string;
+    coordinates?: unknown;
+    magnitudeValue?: number;
+    magnitudeUnit?: string;
+}
+
+interface EonetEvent {
+    id?: string;
+    title?: string;
+    link?: string;
+    geometry?: EonetGeometry[];
+}
+
+function parseEonetEvents(data: { events?: EonetEvent[] }): FireDetection[] {
+    return (data.events ?? []).flatMap((event) => {
+        const points = (event.geometry ?? []).filter(
+            (g) => g.type === "Point"
+        );
+        const latest = points[points.length - 1];
+        const coordinates = pointCoordinates(latest?.coordinates);
+        if (!event.id || !event.title || !latest?.date || !coordinates) {
+            return [];
+        }
+
+        const detailParts = ["Peristiwa kebakaran masih terpantau"];
+        if (latest.magnitudeValue != null && latest.magnitudeUnit) {
+            detailParts.push(
+                `luas terdampak ~${latest.magnitudeValue} ${latest.magnitudeUnit === "acres" ? "acre" : latest.magnitudeUnit}`
+            );
+        }
+        if (event.link) detailParts.push("NASA EONET");
+
+        return [
+            {
+                id: `eonet-${event.id}`,
+                source: "NASA EONET" as const,
+                coordinates,
+                detectedAt: latest.date,
+                confidence: "high" as const,
+                title: event.title,
+                detail: detailParts.join(" · "),
+            },
+        ];
+    });
+}
+
+async function fetchEonetEvents(): Promise<FireDetection[]> {
+    const response = await fetch(EONET_EVENTS_URL, {
+        next: { revalidate: 600 },
+    });
+    if (!response.ok) throw new Error(`NASA EONET ${response.status}`);
+    return parseEonetEvents(await response.json());
+}
+
+/* ---------- cross-verifikasi antar-sumber ---------- */
+
+function distanceKm(
+    a: [number, number],
+    b: [number, number]
+): number {
+    const rad = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * rad;
+    const dLon = (b[1] - a[1]) * rad;
+    const h =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(a[0] * rad) *
+            Math.cos(b[0] * rad) *
+            Math.sin(dLon / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+/**
+ * Tandai deteksi yang dikonfirmasi sumber lain dalam radius tertentu.
+ * Laporan warga (PetaBencana) butuh satelit dekat (5 km); sesama produk
+ * satelit (FIRMS/EONET) memakai radius lebih lebar karena sentroidnya kasar.
+ */
+function applyCrossVerification(detections: FireDetection[]): FireDetection[] {
+    return detections.map((detection) => {
+        const radius = VERIFY_RADIUS_KM[detection.source] ?? 5;
+        const verifiedBy = new Set<string>();
+        let nearest: number | undefined;
+
+        for (const other of detections) {
+            if (other.source === detection.source) continue;
+            const d = distanceKm(detection.coordinates, other.coordinates);
+            if (d <= radius) {
+                verifiedBy.add(other.source);
+                if (nearest === undefined || d < nearest) nearest = d;
+            }
+        }
+
+        if (verifiedBy.size === 0) return detection;
+        return {
+            ...detection,
+            verifiedBy: [...verifiedBy],
+            verifyDistanceKm:
+                nearest !== undefined ? Math.round(nearest * 10) / 10 : undefined,
+        };
+    });
+}
+
 export async function GET(request: Request) {
     const firmsMapKey = process.env.FIRMS_MAP_KEY;
-    const [petaResult, firmsResult] = await Promise.allSettled([
+    const [petaResult, firmsResult, eonetResult] = await Promise.allSettled([
         fetchPetaReports(),
         firmsMapKey ? fetchFirmsDetections(firmsMapKey) : Promise.resolve([]),
+        fetchEonetEvents(),
     ]);
 
-    const detections: FireDetection[] = [];
+    let detections: FireDetection[] = [];
     const sources: Record<string, FireSourceStatus> = {
         PetaBencana: { ok: false, count: 0, configured: true },
         "NASA FIRMS": {
@@ -178,6 +291,7 @@ export async function GET(request: Request) {
             configured: Boolean(firmsMapKey),
             ...(!firmsMapKey ? { error: "FIRMS_MAP_KEY belum diatur." } : {}),
         },
+        "NASA EONET": { ok: false, count: 0, configured: true },
     };
 
     if (petaResult.status === "fulfilled") {
@@ -207,6 +321,22 @@ export async function GET(request: Request) {
                 ? firmsResult.reason.message
                 : "Sumber data tidak tersedia.";
     }
+
+    if (eonetResult.status === "fulfilled") {
+        detections.push(...eonetResult.value);
+        sources["NASA EONET"] = {
+            ok: true,
+            count: eonetResult.value.length,
+            configured: true,
+        };
+    } else {
+        sources["NASA EONET"].error =
+            eonetResult.reason instanceof Error
+                ? eonetResult.reason.message
+                : "Sumber data tidak tersedia.";
+    }
+
+    detections = applyCrossVerification(detections);
 
     detections.sort(
         (a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime()

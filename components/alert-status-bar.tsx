@@ -76,7 +76,7 @@ export function AlertStatusBar() {
             </div>
 
             {selectedKelurahan ? (
-              <div className="mt-0.5 flex items-center gap-1.5 text-sm text-fg">
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm text-fg">
                 <MapPin className="h-3.5 w-3.5 text-fg-muted" />
                 <span className="font-semibold">{selectedKelurahan.name_local}</span>
                 <span className="text-fg-muted">•</span>
@@ -86,10 +86,10 @@ export function AlertStatusBar() {
               </div>
             ) : null}
 
-            <h2 className="mt-0.5 text-lg font-bold text-fg">
+            <h2 className="mt-0.5 break-words text-lg font-bold text-fg">
               {alertConfig.label}
             </h2>
-            <p className="max-w-3xl text-sm text-fg-muted">
+            <p className="max-w-3xl break-words text-sm text-fg-muted">
               {alertConfig.recommendation}
             </p>
 

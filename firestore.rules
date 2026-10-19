@@ -26,36 +26,131 @@ service cloud.firestore {
                              && resource.data.userId == request.auth.uid;
     }
 
+    // Validasi field pesan yang dipakai bersama oleh chat publik & grup.
+    function validMessage() {
+      return request.resource.data.userId == request.auth.uid
+             && request.resource.data.text is string
+             && request.resource.data.text.size() <= 500
+             && request.resource.data.name is string
+             && request.resource.data.name.size() <= 40
+             && request.resource.data.likes is list
+             && (!('imageUrl' in request.resource.data)
+                 || (request.resource.data.imageUrl is string
+                     && request.resource.data.imageUrl.size() <= 1000))
+             && (!('photoUrl' in request.resource.data)
+                 || (request.resource.data.photoUrl is string
+                     && request.resource.data.photoUrl.size() <= 1000))
+             && (!('parentId' in request.resource.data)
+                 || request.resource.data.parentId is string)
+             && (!('parentName' in request.resource.data)
+                 || (request.resource.data.parentName is string
+                     && request.resource.data.parentName.size() <= 40))
+             && (!('parentText' in request.resource.data)
+                 || (request.resource.data.parentText is string
+                     && request.resource.data.parentText.size() <= 200));
+    }
+
+    // Update hanya boleh menyentuh 'likes' (oleh siapa pun yang login)
+    // atau 'text'+'editedAt' (hanya penulis pesan, untuk koreksi typo).
+    function validMessageEdit() {
+      return request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['likes'])
+             && request.resource.data.likes is list
+          || resource.data.userId == request.auth.uid
+             && request.resource.data.diff(resource.data)
+                  .affectedKeys().hasOnly(['text', 'editedAt'])
+             && request.resource.data.text is string
+             && request.resource.data.text.size() <= 500;
+    }
+
     // Public community chat. Only registered (non-anonymous) members can
     // post and like. Messages must be tagged with the sender's own uid.
     match /community_messages/{doc} {
       allow read: if isMember();
+      allow create: if isMember() && validMessage();
+      allow update: if isMember() && validMessageEdit();
+      allow delete: if isMember() && resource.data.userId == request.auth.uid;
+    }
+
+    // Grup chat ala WhatsApp. Pembuat grup otomatis menjadi admin; admin
+    // bisa mengubah nama grup, role anggota, menambah/mengeluarkan anggota.
+    // Anggota biasa hanya bisa mengirim pesan (update lastMessage*) dan
+    // keluar dari grup (menghapus dirinya sendiri).
+    match /chat_groups/{groupId} {
+      function group() {
+        return get(/databases/$(database)/documents/chat_groups/$(groupId)).data;
+      }
+      function inGroup() {
+        return isMember() && request.auth.uid in group().memberIds;
+      }
+      function isAdmin() {
+        return inGroup() && group().roles.get(request.auth.uid, 'member') == 'admin';
+      }
+      // Update lastMessage* oleh pengirim pesan (anggota grup).
+      function onlyLastMessage() {
+        return request.resource.data.diff(resource.data)
+                 .affectedKeys()
+                 .hasOnly(['lastMessageText', 'lastMessageName', 'lastMessageAt']);
+      }
+      // Keluar grup: hanya uid sendiri yang dihapus dari memberIds/roles/members.
+      function onlySelfLeave() {
+        return request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['memberIds', 'roles', 'members'])
+               && request.resource.data.memberIds.size()
+                    == resource.data.memberIds.size() - 1
+               && !(request.auth.uid in request.resource.data.memberIds)
+               && request.resource.data.roles.diff(resource.data.roles)
+                    .affectedKeys().hasOnly([request.auth.uid])
+               && request.resource.data.members.diff(resource.data.members)
+                    .affectedKeys().hasOnly([request.auth.uid]);
+      }
+      // Gabung lewat tautan undangan: hanya uid sendiri yang ditambah
+      // sebagai 'member' — tidak bisa mengangkat diri jadi admin, dan kode
+      // undangan yang ditulis harus cocok dengan inviteCode grup (reset link
+      // mematikan tautan lama).
+      function onlySelfJoin() {
+        return request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['memberIds', 'roles', 'members'])
+               && request.resource.data.memberIds.size()
+                    == resource.data.memberIds.size() + 1
+               && request.auth.uid in request.resource.data.memberIds
+               && request.resource.data.roles.diff(resource.data.roles)
+                    .affectedKeys().hasOnly([request.auth.uid])
+               && request.resource.data.roles[request.auth.uid] == 'member'
+               && request.resource.data.members.diff(resource.data.members)
+                    .affectedKeys().hasOnly([request.auth.uid])
+               && 'inviteCode' in resource.data
+               && request.resource.data.members[request.auth.uid].inviteCode
+                    == resource.data.inviteCode;
+      }
+
+      // Anggota terdaftar boleh membaca dok grup (dipakai untuk preview
+      // tautan undangan); isi pesan tetap terkunci untuk anggota saja.
+      allow read: if isMember();
       allow create: if isMember()
-                     && request.resource.data.userId == request.auth.uid
-                     && request.resource.data.text is string
-                     && request.resource.data.text.size() <= 500
+                     && request.resource.data.createdBy == request.auth.uid
                      && request.resource.data.name is string
-                     && request.resource.data.name.size() <= 40
-                     && request.resource.data.likes is list
-                     && (!('imageUrl' in request.resource.data)
-                         || (request.resource.data.imageUrl is string
-                             && request.resource.data.imageUrl.size() <= 1000))
-                     && (!('photoUrl' in request.resource.data)
-                         || (request.resource.data.photoUrl is string
-                             && request.resource.data.photoUrl.size() <= 1000))
-                     && (!('parentId' in request.resource.data)
-                         || request.resource.data.parentId is string)
-                     && (!('parentName' in request.resource.data)
-                         || (request.resource.data.parentName is string
-                             && request.resource.data.parentName.size() <= 40))
-                     && (!('parentText' in request.resource.data)
-                         || (request.resource.data.parentText is string
-                             && request.resource.data.parentText.size() <= 200));
-      allow update: if isMember()
-                     && request.resource.data.diff(resource.data)
-                          .affectedKeys().hasOnly(['likes'])
-                     && request.resource.data.likes is list;
-      allow delete: if false;
+                     && request.resource.data.name.size() <= 60
+                     && request.resource.data.memberIds is list
+                     && request.resource.data.memberIds.size() <= 100
+                     && request.auth.uid in request.resource.data.memberIds
+                     && request.resource.data.roles is map
+                     && request.resource.data.roles.get(request.auth.uid, 'member')
+                          == 'admin'
+                     && request.resource.data.members is map;
+      allow update: if inGroup()
+                     && (isAdmin() || onlyLastMessage() || onlySelfLeave())
+                     || isMember() && onlySelfJoin();
+      // Hanya admin yang bisa membubarkan grup.
+      allow delete: if isAdmin();
+
+      match /messages/{doc} {
+        allow read: if inGroup();
+        allow create: if inGroup() && validMessage();
+        allow update: if inGroup() && validMessageEdit();
+        allow delete: if inGroup()
+                       && (isAdmin() || resource.data.userId == request.auth.uid);
+      }
     }
 
     // User profiles (display name, birth date, photo). Members can read

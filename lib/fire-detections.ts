@@ -1,5 +1,5 @@
 export type FireConfidence = "low" | "medium" | "high" | "reported";
-export type FireDetectionSource = "PetaBencana" | "NASA FIRMS";
+export type FireDetectionSource = "PetaBencana" | "NASA FIRMS" | "NASA EONET";
 
 export interface FireDetection {
     id: string;
@@ -10,6 +10,10 @@ export interface FireDetection {
     title: string;
     detail?: string;
     frp?: number;
+    /** sumber lain yang mengonfirmasi titik ini dalam radius verifikasi */
+    verifiedBy?: string[];
+    /** jarak ke titik sumber konfirmasi terdekat (km) */
+    verifyDistanceKm?: number;
 }
 
 export interface FireSourceStatus {
