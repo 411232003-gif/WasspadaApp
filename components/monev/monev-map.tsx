@@ -3,6 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import "react-leaflet-cluster/dist/assets/MarkerCluster.css";
 import "react-leaflet-cluster/dist/assets/MarkerCluster.Default.css";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
@@ -40,6 +41,8 @@ import type {
   FireDetection,
   FireSourceStatus,
 } from "@/lib/fire-detections";
+import { reverseGeocode } from "@/lib/place-name";
+import { GIBS_LAYERS, gibsTileUrl, type GibsLayerKey } from "@/lib/gibs";
 import {
   Wind,
   Layers,
@@ -52,7 +55,10 @@ import {
   Activity,
   MapPin,
   Route,
+  Globe2,
 } from "lucide-react";
+
+const CesiumGlobe = dynamic(() => import("./cesium-globe"), { ssr: false });
 
 type Direction = "N" | "S" | "E" | "W";
 type AshDirection = Direction | "AUTO";
@@ -127,39 +133,19 @@ function confidenceLabel(confidence: FireConfidence) {
   return "Keyakinan rendah";
 }
 
-/* cache nama tempat hasil reverse-geocode (per ~100 m grid) */
-const placeCache = new Map<string, string | null>();
-
 /** Konten popup titik api: status verifikasi, nama lokasi, link Google Maps.
  *  Reverse geocode dilakukan lazy — hanya saat popup dibuka — agar
  *  mematuhi rate limit Nominatim (maks 1 req/detik). */
 function FirePopupContent({ detection }: { detection: FireDetection }) {
   const [lat, lon] = detection.coordinates;
-  const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
-  const [place, setPlace] = useState<string | null>(
-    () => placeCache.get(cacheKey) ?? null
-  );
-  const [placeLoading, setPlaceLoading] = useState(
-    () => !placeCache.has(cacheKey)
-  );
+  const [place, setPlace] = useState<string | null>(null);
+  const [placeLoading, setPlaceLoading] = useState(true);
 
   useEffect(() => {
-    if (placeCache.has(cacheKey)) return;
     let alive = true;
-    fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=id&zoom=14&lat=${lat}&lon=${lon}`
-    )
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        const name =
-          typeof data?.display_name === "string"
-            ? data.display_name.split(",").slice(0, 3).join(",").trim()
-            : null;
-        placeCache.set(cacheKey, name);
+    reverseGeocode(lat, lon)
+      .then((name) => {
         if (alive) setPlace(name);
-      })
-      .catch(() => {
-        placeCache.set(cacheKey, null);
       })
       .finally(() => {
         if (alive) setPlaceLoading(false);
@@ -167,7 +153,7 @@ function FirePopupContent({ detection }: { detection: FireDetection }) {
     return () => {
       alive = false;
     };
-  }, [lat, lon, cacheKey]);
+  }, [lat, lon]);
 
   const verified = (detection.verifiedBy?.length ?? 0) > 0;
   const statusText = verified
@@ -307,6 +293,8 @@ export default function MonevMap() {
     const allowed: TileProvider[] = ["osm", "esri-street", "esri-sat"];
     return allowed.includes(env) ? env : "esri-street";
   });
+  const [viewMode, setViewMode] = useState<"2d" | "3d">("2d");
+  const [satLayer, setSatLayer] = useState<GibsLayerKey>("none");
   const [layers, setLayers] = useState({
     volcanoes: true,
     earthquakes: true,
@@ -593,6 +581,51 @@ export default function MonevMap() {
 
   return (
     <div className="relative h-[60vh] md:h-[calc(100vh-7rem)] min-h-[420px] w-full rounded-2xl overflow-hidden glass-panel">
+      {/* toggle peta 2D / globe 3D */}
+      <div className="absolute bottom-3 right-3 z-[600] flex overflow-hidden rounded-xl border border-card-border shadow-lg">
+        <button
+          type="button"
+          onClick={() => setViewMode("2d")}
+          className={`px-3 py-2 text-[11px] font-bold transition-colors ${
+            viewMode === "2d"
+              ? "bg-accent text-bg"
+              : "bg-zinc-950/90 text-white hover:text-accent"
+          }`}
+        >
+          Peta 2D
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode("3d")}
+          className={`flex items-center gap-1 px-3 py-2 text-[11px] font-bold transition-colors ${
+            viewMode === "3d"
+              ? "bg-accent text-bg"
+              : "bg-zinc-950/90 text-white hover:text-accent"
+          }`}
+        >
+          <Globe2 className="h-3.5 w-3.5" />
+          Globe 3D
+        </button>
+      </div>
+
+      {viewMode === "3d" && (
+        <CesiumGlobe
+          volcanoes={volcanoes}
+          earthquakes={earthquakes}
+          fires={visibleFireDetections}
+          center={center}
+          centerName={selectedKelurahan?.name_local || "Lokasi Pantauan"}
+          safeZone={safeZoneCoords}
+          plume={plume}
+          windLines={windLines}
+          krbCenter={layers.krb ? plumeOrigin : null}
+          layers={layers}
+          tileProvider={tileProvider}
+          satLayer={satLayer}
+        />
+      )}
+
+      {viewMode === "2d" && (
       <MapContainer
         center={center}
         zoom={zoom}
@@ -606,6 +639,18 @@ export default function MonevMap() {
           url={tileConfig.url}
           subdomains={tileConfig.subdomains}
         />
+
+        {/* overlay citra satelit NASA GIBS (data ~2 hari lalu) */}
+        {satLayer !== "none" && (
+          <TileLayer
+            key={`gibs-${satLayer}`}
+            url={gibsTileUrl(GIBS_LAYERS[satLayer])}
+            attribution="NASA GIBS / EOSDIS"
+            opacity={GIBS_LAYERS[satLayer].alpha}
+            maxNativeZoom={GIBS_LAYERS[satLayer].maxZoom}
+            zIndex={10}
+          />
+        )}
 
         {/* posisi kelurahan/lokasi terpilih */}
         {layers.kelurahan && (
@@ -789,6 +834,7 @@ export default function MonevMap() {
           </>
         )}
       </MapContainer>
+      )}
 
       {/* toggle panel */}
       {!panelOpen && (
@@ -859,6 +905,54 @@ export default function MonevMap() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* layer citra satelit NASA */}
+          <div className="mb-4 space-y-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+              <Satellite className="h-3.5 w-3.5" /> Layer Satelit NASA
+            </label>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSatLayer("none")}
+                className={`rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${
+                  satLayer === "none"
+                    ? "bg-accent/15 text-accent"
+                    : "bg-white/5 text-fg-muted hover:text-fg"
+                }`}
+              >
+                Mati
+              </button>
+              {(Object.keys(GIBS_LAYERS) as (keyof typeof GIBS_LAYERS)[]).map(
+                (key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSatLayer(key)}
+                    className={`rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${
+                      satLayer === key
+                        ? "bg-accent/15 text-accent"
+                        : "bg-white/5 text-fg-muted hover:text-fg"
+                    }`}
+                  >
+                    {key === "aerosol"
+                      ? "Asap"
+                      : key === "co"
+                        ? "CO"
+                        : key === "precip"
+                          ? "Hujan"
+                          : "Warna Asli"}
+                  </button>
+                )
+              )}
+            </div>
+            {satLayer !== "none" && (
+              <p className="text-[10px] text-fg-muted">
+                {GIBS_LAYERS[satLayer].label} — data harian terbaru (jeda ~1–2
+                hari), sumber NASA GIBS.
+              </p>
+            )}
           </div>
 
           {/* info angin + boost */}

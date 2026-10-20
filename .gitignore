@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# cesium static assets (disalin otomatis via postinstall)
+/public/cesium

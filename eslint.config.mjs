@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // aset UMD Cesium (disalin dari node_modules, bukan kode kita)
+    "public/cesium/**",
   ]),
 ]);
 
