@@ -7,6 +7,8 @@ import {
   Flame,
   Loader2,
   MapPin,
+  Pause,
+  Play,
   ShieldAlert,
   ShieldCheck,
   X,
@@ -23,6 +25,7 @@ import { ALERT_LEVELS } from "@/lib/alert-context";
 import {
   GIBS_CREDIT,
   GIBS_LAYERS,
+  gibsFrames,
   gibsTileUrl,
   type GibsLayerKey,
 } from "@/lib/gibs";
@@ -50,6 +53,11 @@ function loadCesium(): Promise<any> {
   }
   return cesiumPromise;
 }
+
+/** Fokus Asia Tenggara — tile di luar kotak ini tidak diunduh (hemat data/HP). */
+const SEA_BOUNDS = { west: 92, south: -12, east: 142, north: 22 };
+/** Batas gerak kamera sedikit lebih lebar dari area citra. */
+const CAMERA_BOUNDS = { west: 80, south: -30, east: 160, north: 36 };
 
 const TILE_URLS: Record<string, { url: string; credit: string }> = {
   osm: {
@@ -98,9 +106,27 @@ interface Props {
   /** pusat zona KRB (sumber abu / fallback lokasi pantauan) */
   krbCenter: [number, number] | null;
   layers: GlobeLayers;
-  tileProvider: "osm" | "esri-street" | "esri-sat";
   /** overlay citra satelit NASA GIBS */
   satLayer: GibsLayerKey;
+}
+
+/** Label waktu frame animasi — jam untuk step 10-menit, tanggal untuk harian. */
+function frameLabel(t: string): string {
+  if (t === "default") return "Data terbaru";
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return t;
+  return d.toLocaleString(
+    "id-ID",
+    t.includes("T")
+      ? {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Asia/Jakarta",
+        }
+      : { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Jakarta" }
+  );
 }
 
 function fireColorHex(d: FireDetection): string {
@@ -203,7 +229,6 @@ export default function CesiumGlobe({
   windLines,
   krbCenter,
   layers,
-  tileProvider,
   satLayer,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -213,6 +238,24 @@ export default function CesiumGlobe({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GlobeInfo | null>(null);
+  const [playing, setPlaying] = useState(false);
+  /* -1 = mode "live" (data terbaru); >=0 = indeks frame waktu */
+  const [frameIdx, setFrameIdx] = useState(-1);
+
+  /* frame waktu animasi overlay (Himawari 10-menit / produk harian) */
+  const frames = useMemo(
+    () =>
+      satLayer === "none" ? [] : gibsFrames(GIBS_LAYERS[satLayer].step),
+    [satLayer]
+  );
+  const [prevSatLayer, setPrevSatLayer] = useState(satLayer);
+  if (satLayer !== prevSatLayer) {
+    setPrevSatLayer(satLayer);
+    setPlaying(false);
+    setFrameIdx(-1);
+  }
+  const overlayTime =
+    frameIdx >= 0 && frames.length ? frames[frameIdx] : "default";
 
   /* ---------- tingkat ancaman di sekitar lokasi pantauan ---------- */
   const threats = useMemo(() => {
@@ -281,15 +324,42 @@ export default function CesiumGlobe({
         });
         viewerRef.current = viewer;
 
+        /* HP layar retina → cap resolusi render 1.5x agar tidak ngelag */
+        viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.5);
+
         viewer.scene.globe.baseColor = Cesium.Color.BLACK;
         viewer.scene.globe.showGroundAtmosphere = true;
         viewer.scene.skyAtmosphere.show = true;
+
+        /* fokus Asia Tenggara: batasi jarak zoom & geser kamera */
+        viewer.scene.screenSpaceCameraController.minimumZoomDistance = 80000;
+        viewer.scene.screenSpaceCameraController.maximumZoomDistance = 9000000;
         viewer.camera.setView({
-          destination: Cesium.Cartesian3.fromDegrees(
-            center[1],
-            center[0],
-            1200000
+          destination: Cesium.Rectangle.fromDegrees(
+            SEA_BOUNDS.west,
+            SEA_BOUNDS.south,
+            SEA_BOUNDS.east,
+            SEA_BOUNDS.north
           ),
+        });
+        viewer.scene.postRender.addEventListener(() => {
+          if (viewer.scene.mode !== Cesium.SceneMode.SCENE3D) return;
+          const pos = viewer.camera.positionCartographic;
+          if (!pos) return;
+          const toRad = Math.PI / 180;
+          const lon = Math.min(
+            Math.max(pos.longitude, CAMERA_BOUNDS.west * toRad),
+            CAMERA_BOUNDS.east * toRad
+          );
+          const lat = Math.min(
+            Math.max(pos.latitude, CAMERA_BOUNDS.south * toRad),
+            CAMERA_BOUNDS.north * toRad
+          );
+          if (lon !== pos.longitude || lat !== pos.latitude) {
+            viewer.camera.setView({
+              destination: Cesium.Cartesian3.fromRadians(lon, lat, pos.height),
+            });
+          }
         });
 
         dataSourceRef.current = new Cesium.CustomDataSource("wasspada");
@@ -313,24 +383,29 @@ export default function CesiumGlobe({
       viewerRef.current = null;
       dataSourceRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- basemap ---------- */
+  /* ---------- basemap citra satelit (tetap Esri World Imagery) ---------- */
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     loadCesium().then((Cesium) => {
-      const tile = TILE_URLS[tileProvider] ?? TILE_URLS["esri-sat"];
+      const tile = TILE_URLS["esri-sat"];
       viewer.imageryLayers.removeAll(true);
       viewer.imageryLayers.addImageryProvider(
         new Cesium.UrlTemplateImageryProvider({
           url: tile.url,
           credit: tile.credit,
+          rectangle: Cesium.Rectangle.fromDegrees(
+            SEA_BOUNDS.west,
+            SEA_BOUNDS.south,
+            SEA_BOUNDS.east,
+            SEA_BOUNDS.north
+          ),
         })
       );
     });
-  }, [tileProvider, ready]);
+  }, [ready]);
 
   /* ---------- overlay citra satelit NASA GIBS ---------- */
   useEffect(() => {
@@ -345,16 +420,32 @@ export default function CesiumGlobe({
       const def = GIBS_LAYERS[satLayer];
       const layer = viewer.imageryLayers.addImageryProvider(
         new Cesium.UrlTemplateImageryProvider({
-          url: gibsTileUrl(def),
+          url: gibsTileUrl(def, overlayTime),
           credit: GIBS_CREDIT,
           maximumLevel: def.maxZoom,
           tilingScheme: new Cesium.WebMercatorTilingScheme(),
+          rectangle: Cesium.Rectangle.fromDegrees(
+            SEA_BOUNDS.west,
+            SEA_BOUNDS.south,
+            SEA_BOUNDS.east,
+            SEA_BOUNDS.north
+          ),
         })
       );
       layer.alpha = def.alpha;
       overlayRef.current = layer;
     });
-  }, [satLayer, ready]);
+  }, [satLayer, overlayTime, ready]);
+
+  /* ---------- animasi frame waktu ---------- */
+  useEffect(() => {
+    if (!playing || frames.length === 0) return;
+    const id = setInterval(
+      () => setFrameIdx((i) => (i + 1) % frames.length),
+      900
+    );
+    return () => clearInterval(id);
+  }, [playing, frames.length]);
 
   /* ---------- kamera mengikuti lokasi pantauan ---------- */
   useEffect(() => {
@@ -662,6 +753,45 @@ export default function CesiumGlobe({
 
       {selected && (
         <GlobeInfoCard info={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {/* kontrol animasi + slider linimasa layer satelit */}
+      {ready && satLayer !== "none" && (
+        <div className="absolute bottom-3 left-1/2 z-[600] flex w-[min(92vw,340px)] -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-zinc-950/90 px-3 py-1.5 shadow-xl">
+          <button
+            type="button"
+            onClick={() => {
+              if (!playing && frameIdx === -1) setFrameIdx(0);
+              setPlaying((p) => !p);
+            }}
+            aria-label={playing ? "Jeda animasi" : "Putar animasi"}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sky-500/20 text-sky-300 transition-colors hover:bg-sky-500/30"
+          >
+            {playing ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(frames.length - 1, 0)}
+            step={1}
+            value={frameIdx === -1 ? frames.length - 1 : frameIdx}
+            onChange={(e) => {
+              setPlaying(false);
+              setFrameIdx(Number(e.target.value));
+            }}
+            aria-label="Linimasa citra satelit"
+            className="h-1 min-w-0 flex-1 cursor-pointer accent-sky-400"
+          />
+          <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-white">
+            {frameIdx === -1
+              ? `Terbaru — ${GIBS_LAYERS[satLayer].label}`
+              : frameLabel(overlayTime)}
+          </span>
+        </div>
       )}
 
       <p className="pointer-events-none absolute bottom-2 right-3 z-[500] flex items-center gap-1 text-[10px] font-semibold text-white/70">

@@ -8,12 +8,13 @@ import {
   Camera,
   Loader2,
   LogIn,
+  LogOut,
   Lock,
   Save,
   UserCircle2,
 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
-import { useAuthUser } from "@/lib/auth";
+import { useAuthUser, logout } from "@/lib/auth";
 import { getUserProfile, saveUserProfile } from "@/lib/profile";
 import { isSupabaseConfigured, uploadChatImage } from "@/lib/supabase";
 
@@ -26,9 +27,22 @@ export function ProfileForm() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [existingPhoto, setExistingPhoto] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.push("/login");
+    } catch {
+      setError("Gagal keluar. Coba lagi.");
+      setLoggingOut(false);
+    }
+  };
 
   const preview = useMemo(
     () => (photo ? URL.createObjectURL(photo) : null),
@@ -230,6 +244,20 @@ export function ProfileForm() {
           {busy ? "Menyimpan..." : "Simpan Profil"}
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={loggingOut}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/15 py-3 text-sm font-bold text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-60"
+      >
+        {loggingOut ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <LogOut className="h-4 w-4" />
+        )}
+        {loggingOut ? "Keluar..." : "Keluar Akun"}
+      </button>
     </GlassCard>
   );
 }
