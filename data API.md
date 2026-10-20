@@ -63,25 +63,50 @@ const EONET_WILDFIRES =
 // bbox = minLong,maxLat,maxLong,minLat (Indonesia)
 ```
 
-6. NASA GIBS — Citra Satelit WMTS (4 layer)
+6. NASA GIBS — Citra Satelit WMTS (5 layer)
 
 ```ts
-// Pola: https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{LAYER}/default/default/{TMS}/{z}/{y}/{x}.{ext}
+// Pola: https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{LAYER}/default/{TIME}/{TMS}/{z}/{y}/{x}.{ext}
 const GIBS = {
+  himawari:  { id: "Himawari_AHI_Band13_Clean_Infrared", tms: "GoogleMapsCompatible_Level6", ext: "png" }, // satelit live ~10 mnt
   aerosol:   { id: "MODIS_Terra_Aerosol", tms: "GoogleMapsCompatible_Level6", ext: "png" },
   co:        { id: "AIRS_L2_Carbon_Monoxide_500hPa_Volume_Mixing_Ratio_Day", tms: "GoogleMapsCompatible_Level6", ext: "png" },
   precip:    { id: "IMERG_Precipitation_Rate", tms: "GoogleMapsCompatible_Level6", ext: "png" },
   truecolor: { id: "MODIS_Terra_CorrectedReflectance_TrueColor", tms: "GoogleMapsCompatible_Level9", ext: "jpeg" },
 };
-// "default" pada Time = data harian terbaru (jeda ~1–2 hari)
+// TIME: "default" = data terbaru; untuk animasi → "YYYY-MM-DD" (harian)
+// atau "YYYY-MM-DDTHH:mm:ssZ" (Himawari per-10-menit)
 ```
 
 7. Open-Meteo — Angin & Cuaca
 
 ```ts
+// Titik tunggal (dipakai /api/wind)
 const OPEN_METEO =
   "https://api.open-meteo.com/v1/forecast" +
   "?latitude={lat}&longitude={lon}&current=wind_speed_10m,wind_direction_10m";
+
+// Multi-lokasi → grid model cuaca Monev Map (~96 titik Asia Tenggara,
+// dipakai lib/weather-overlay.ts untuk overlay angin/suhu/kelembapan/tekanan)
+const OPEN_METEO_GRID =
+  "https://api.open-meteo.com/v1/forecast" +
+  "?latitude=lat1,lat2,...&longitude=lon1,lon2,..." +
+  "&current=temperature_2m,apparent_temperature,relative_humidity_2m," +
+  "dew_point_2m,wind_speed_10m,wind_gusts_10m,pressure_msl";
+// Suhu bola basah dihitung dari T+RH (aproksimasi Stull 2011)
+```
+
+7b. RainViewer — Radar Hujan Global (tile)
+
+```ts
+// 1) ambil daftar frame radar terbaru
+const RV_META = "https://api.rainviewer.com/public/weather-maps.json";
+//    → json.radar.past[terakhir].path
+
+// 2) template tile (disisipkan path dari langkah 1)
+const RV_TILE =
+  "https://tilecache.rainviewer.com{path}/256/{z}/{x}/{y}/2/1_1.png";
+// Update ~10 menit; dipakai overlay "Radar Hujan" di Monev Map
 ```
 
 8. Nominatim (OpenStreetMap) — Nama Lokasi / Reverse Geocode
@@ -144,7 +169,7 @@ const TILES = {
 
 #Ringkasan
 
-- **13 API eksternal gratis tanpa kunci** (kode di atas).
+- **14 API eksternal gratis tanpa kunci** (kode di atas).
 - **4 layanan berkunci** (Firebase, Supabase, FIRMS, reCAPTCHA).
 - **8 route internal** sebagai proxy/penggabung.
-- Total: **~17 sumber data** — semuanya gratis/free tier.
+- Total: **~18 sumber data** — semuanya gratis/free tier.
