@@ -22,24 +22,13 @@ import type {
   FireSourceStatus,
 } from "@/lib/fire-detections";
 import {
-  GIBS_CREDIT,
-  GIBS_LAYERS,
-  gibsFrames,
-  gibsTileUrl,
-  type GibsLayerKey,
-} from "@/lib/gibs";
-import {
   fetchWeatherGrid,
-  renderWeatherImage,
-  rainviewerTileUrl,
-  colorbarCss,
-  RAINVIEWER_CREDIT,
-  WEATHER_LAYERS,
+  renderTempImage,
+  tempColorbarCss,
+  TEMP_RANGES,
   WEATHER_RECT,
-  type WeatherGrid,
-  type WeatherLayerKey,
+  type WeatherPoint,
 } from "@/lib/weather-overlay";
-import type { OverlaySpec } from "./cesium-globe";
 import {
   Wind,
   Layers,
@@ -53,91 +42,12 @@ import {
   MapPin,
   Route,
   CloudSun,
-  Play,
-  Pause,
+  Thermometer,
   Maximize2,
   Minimize2,
 } from "lucide-react";
 
 const CesiumGlobe = dynamic(() => import("./cesium-globe"), { ssr: false });
-
-type GibsOverlayKey = Exclude<GibsLayerKey, "none">;
-type OverlayKey = "none" | GibsOverlayKey | "radar" | WeatherLayerKey;
-
-const GIBS_OVERLAY_KEYS: GibsOverlayKey[] = [
-  "satellite",
-  "precip",
-  "aerosol",
-  "co",
-  "truecolor",
-];
-const isGibsOverlay = (k: OverlayKey): k is GibsOverlayKey =>
-  (GIBS_OVERLAY_KEYS as string[]).includes(k);
-const isWeatherOverlay = (k: OverlayKey): k is WeatherLayerKey =>
-  k in WEATHER_LAYERS;
-
-/** Grup dropdown overlay ala Zoom Earth — satu overlay aktif. */
-const OVERLAY_GROUPS: {
-  label: string;
-  options: { key: OverlayKey; label: string }[];
-}[] = [
-  {
-    label: "Satelit",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "satellite", label: "Live — Himawari" },
-      { key: "truecolor", label: "HD — True Color" },
-      { key: "radar", label: "Radar Hujan" },
-    ],
-  },
-  {
-    label: "Presipitasi",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "precip", label: "IMERG (NASA)" },
-    ],
-  },
-  {
-    label: "Angin",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "wind-speed", label: "Kecepatan" },
-      { key: "wind-gusts", label: "Hembusan" },
-    ],
-  },
-  {
-    label: "Suhu",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "temp-actual", label: "Aktual" },
-      { key: "temp-feels", label: "Terasa Seperti" },
-    ],
-  },
-  {
-    label: "Kelembapan",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "hum-rel", label: "Relatif" },
-      { key: "hum-dew", label: "Titik Embun" },
-      { key: "hum-wet", label: "Bola Basah" },
-    ],
-  },
-  {
-    label: "Tekanan",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "pressure", label: "MSL" },
-    ],
-  },
-  {
-    label: "Atmosfer",
-    options: [
-      { key: "none", label: "Mati" },
-      { key: "aerosol", label: "Asap (Aerosol)" },
-      { key: "co", label: "Karbon Monoksida" },
-    ],
-  },
-];
 
 type Direction = "N" | "S" | "E" | "W";
 type AshDirection = Direction | "AUTO";
@@ -152,24 +62,11 @@ const ASH_DIRECTIONS: AshDirection[] = ["AUTO", "N", "E", "S", "W"];
 
 const MAX_FIRE_MARKERS = 250;
 
-/** Label waktu frame animasi — jam untuk step 10-menit, tanggal untuk harian. */
-function frameLabel(t: string): string {
-  if (t === "default") return "Data terbaru";
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return t;
-  return d.toLocaleString(
-    "id-ID",
-    t.includes("T")
-      ? {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "Asia/Jakarta",
-        }
-      : { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Jakarta" }
-  );
-}
+/* MODE DEMO CUACA: tampilkan hanya globe + suhu/partikel angin.
+   Ubah ke false untuk mengembalikan seluruh fitur bencana. */
+const DEMO_CUACA = false;
+
+type WeatherMode = "none" | "temp" | "feels" | "wind";
 
 /* ---------- geometry helpers ---------- */
 function computeCone(
@@ -215,111 +112,46 @@ export default function MonevMap() {
   const [ashDirection, setAshDirection] = useState<AshDirection>("AUTO");
   const [windBoost, setWindBoost] = useState(100); // %
   const [ashIntensity, setAshIntensity] = useState(40);
-  /* overlay tunggal: GIBS / radar RainViewer / model Open-Meteo */
-  const [overlay, setOverlay] = useState<OverlayKey>("none");
   const [mapOnly, setMapOnly] = useState(false);
-  const [radarUrl, setRadarUrl] = useState<string | null>(null);
-  const [grid, setGrid] = useState<WeatherGrid[] | null>(null);
-  const [gridErr, setGridErr] = useState(false);
 
-  /* playback linimasa layer GIBS (-1 = data terbaru/live) */
-  const [playing, setPlaying] = useState(false);
-  const [frameIdx, setFrameIdx] = useState(-1);
-  const frames = useMemo(
-    () =>
-      isGibsOverlay(overlay) ? gibsFrames(GIBS_LAYERS[overlay].step) : [],
-    [overlay]
-  );
-  const [prevOverlay, setPrevOverlay] = useState(overlay);
-  if (overlay !== prevOverlay) {
-    setPrevOverlay(overlay);
-    setPlaying(false);
-    setFrameIdx(-1);
-  }
-  const overlayTime =
-    frameIdx >= 0 && frames.length ? frames[frameIdx] : "default";
+  /* layer cuaca demo: suhu gradasi / partikel hembusan angin */
+  const [weatherMode, setWeatherMode] = useState<WeatherMode>("none");
+  const [weatherGrid, setWeatherGrid] = useState<WeatherPoint[] | null>(null);
+  const [weatherErr, setWeatherErr] = useState(false);
 
   useEffect(() => {
-    if (!playing || frames.length === 0) return;
-    const id = setInterval(
-      () => setFrameIdx((i) => (i + 1) % frames.length),
-      900
-    );
-    return () => clearInterval(id);
-  }, [playing, frames.length]);
-
-  /* URL tile radar RainViewer — diambil saat layer radar dipilih */
-  useEffect(() => {
-    if (overlay !== "radar" || radarUrl) return;
-    let on = true;
-    rainviewerTileUrl()
-      .then((u) => on && setRadarUrl(u))
-      .catch(() => {});
-    return () => {
-      on = false;
-    };
-  }, [overlay, radarUrl]);
-
-  /* grid model Open-Meteo — sekali fetch, dipakai semua layer model */
-  useEffect(() => {
-    if (!isWeatherOverlay(overlay) || grid || gridErr) return;
+    if (weatherMode === "none" || weatherGrid || weatherErr) return;
     let on = true;
     fetchWeatherGrid()
-      .then((g) => on && setGrid(g))
-      .catch(() => on && setGridErr(true));
+      .then((g) => on && setWeatherGrid(g))
+      .catch(() => on && setWeatherErr(true));
     return () => {
       on = false;
     };
-  }, [overlay, grid, gridErr]);
+  }, [weatherMode, weatherGrid, weatherErr]);
 
-  /* grid → gambar gradasi warna (di-memo agar tidak render ulang) */
-  const modelImage = useMemo(() => {
-    if (!isWeatherOverlay(overlay) || !grid) return null;
-    return renderWeatherImage(grid, overlay);
-  }, [grid, overlay]);
+  const tempImage = useMemo(() => {
+    if (
+      (weatherMode !== "temp" && weatherMode !== "feels") ||
+      !weatherGrid
+    )
+      return null;
+    const url = renderTempImage(weatherGrid, weatherMode);
+    return url ? { url, rect: WEATHER_RECT } : null;
+  }, [weatherMode, weatherGrid]);
 
-  const overlaySpec = useMemo<OverlaySpec>(() => {
-    if (overlay === "none") return null;
-    if (isGibsOverlay(overlay)) {
-      const def = GIBS_LAYERS[overlay];
-      return {
-        kind: "tile",
-        url: gibsTileUrl(def, overlayTime),
-        maxZoom: def.maxZoom,
-        alpha: def.alpha,
-        credit: GIBS_CREDIT,
-      };
-    }
-    if (overlay === "radar") {
-      return radarUrl
-        ? {
-            kind: "tile",
-            url: radarUrl,
-            maxZoom: 10,
-            alpha: 0.75,
-            credit: RAINVIEWER_CREDIT,
-          }
-        : null;
-    }
-    if (isWeatherOverlay(overlay) && modelImage) {
-      return {
-        kind: "image",
-        url: modelImage,
-        alpha: WEATHER_LAYERS[overlay].alpha,
-        rect: WEATHER_RECT,
-      };
-    }
-    return null;
-  }, [overlay, overlayTime, radarUrl, modelImage]);
+  const windField =
+    weatherMode === "wind" && weatherGrid ? weatherGrid : null;
+  /* default saat masuk: hanya gunung/gempa/api aktif agar ringan —
+     sisanya pengguna yang memilih lewat toggle */
   const [layers, setLayers] = useState({
-    volcanoes: true,
-    earthquakes: true,
-    fires: true,
-    wind: true,
-    krb: true,
-    plume: true,
-    evacuation: true,
-    kelurahan: true,
+    volcanoes: !DEMO_CUACA,
+    earthquakes: !DEMO_CUACA,
+    fires: !DEMO_CUACA,
+    krb: false,
+    plume: false,
+    evacuation: false,
+    kelurahan: false,
   });
 
   const center = useMemo<[number, number]>(
@@ -328,6 +160,10 @@ export default function MonevMap() {
   );
 
   const load = async () => {
+    if (DEMO_CUACA) {
+      setLoading(false);
+      return;
+    }
     try {
       const [vRes, bRes] = await Promise.all([fetchVolcanoes(), fetchBMKG()]);
       setVolcanoes((vRes.error ? [] : vRes.volcanoes) || []);
@@ -361,6 +197,7 @@ export default function MonevMap() {
   });
 
   const loadFireDetections = async () => {
+    if (DEMO_CUACA) return;
     const response = await fetchFireDetections();
     if (!response.error) {
       setFireDetections(response.detections);
@@ -394,6 +231,7 @@ export default function MonevMap() {
   });
 
   const loadWind = async () => {
+    if (DEMO_CUACA) return;
     setWind(await fetchWind(center[0], center[1]));
   };
 
@@ -445,20 +283,6 @@ export default function MonevMap() {
     [plumeOrigin, ashBearing, plumeLen]
   );
 
-  /* garis aliran angin paralel */
-  const windLines = useMemo(() => {
-    const perp = (windTo + 90) % 360;
-    const lines: [number, number][][] = [];
-    for (const off of [-14, -7, 0, 7, 14]) {
-      const base = computeDestination(center, perp, off);
-      lines.push([
-        computeDestination(base, (windTo + 180) % 360, 26),
-        computeDestination(base, windTo, 26),
-      ]);
-    }
-    return lines;
-  }, [center, windTo]);
-
   /* zona aman menjauhi gunung terdekat */
   const safeZoneCoords: [number, number] = useMemo(() => {
     if (nearestVolcano?.item.lat != null && nearestVolcano.item.lon != null) {
@@ -481,7 +305,6 @@ export default function MonevMap() {
     { key: "earthquakes", label: "Gempa & Radius Dampak" },
     { key: "fires", label: `Titik Kebakaran (${fireDetections.length})` },
     { key: "krb", label: "Zona KRB" },
-    { key: "wind", label: "Aliran Angin" },
     { key: "plume", label: "Sebaran Abu" },
     { key: "evacuation", label: "Jalur Evakuasi" },
     { key: "kelurahan", label: "Lokasi Pantauan" },
@@ -498,11 +321,17 @@ export default function MonevMap() {
           centerName={selectedKelurahan?.name_local || "Lokasi Pantauan"}
           safeZone={safeZoneCoords}
           plume={plume}
-          windLines={windLines}
           krbCenter={layers.krb ? plumeOrigin : null}
           layers={layers}
-          overlay={overlaySpec}
           mapOnly={mapOnly}
+          tempImage={tempImage}
+          windField={windField}
+          probeGrid={
+            weatherMode === "temp" || weatherMode === "feels"
+              ? weatherGrid
+              : null
+          }
+          showBanner={!DEMO_CUACA}
         />
       </div>
 
@@ -551,6 +380,84 @@ export default function MonevMap() {
             </button>
           </div>
 
+          {/* layer cuaca — suhu & animasi hembusan angin */}
+          <div className="mb-4 space-y-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
+              <CloudSun className="h-3.5 w-3.5" /> Cuaca — Asia Tenggara
+            </label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {(
+                [
+                  { key: "none", label: "Mati", icon: X },
+                  { key: "temp", label: "Suhu", icon: Thermometer },
+                  { key: "feels", label: "Terasa", icon: Thermometer },
+                  { key: "wind", label: "Angin", icon: Wind },
+                ] as const
+              ).map((b) => (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => setWeatherMode(b.key)}
+                  className={`flex items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${
+                    weatherMode === b.key
+                      ? "bg-accent/15 text-accent"
+                      : "bg-white/5 text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  <b.icon className="h-3 w-3" />
+                  {b.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] leading-relaxed text-fg-muted">
+              {weatherMode === "none" &&
+                "Layer cuaca nonaktif. Pilih Suhu, Terasa, atau Angin."}
+              {weatherMode === "temp" &&
+                (weatherGrid
+                  ? "Suhu aktual permukaan — ungu dingin, merah panas. Klik di mana saja pada peta untuk cek suhu titik itu. Sumber: Open-Meteo."
+                  : weatherErr
+                    ? "Gagal memuat data cuaca Open-Meteo."
+                    : "Memuat data suhu Open-Meteo...")}
+              {weatherMode === "feels" &&
+                (weatherGrid
+                  ? "Suhu terasa (feels like) — memperhitungkan kelembapan & angin. Klik peta untuk cek nilai titik. Sumber: Open-Meteo."
+                  : weatherErr
+                    ? "Gagal memuat data cuaca Open-Meteo."
+                    : "Memuat data suhu terasa Open-Meteo...")}
+              {weatherMode === "wind" &&
+                (weatherGrid
+                  ? "Partikel menunjukkan arah & hembusan angin — hijau tenang, merah kencang. Sumber: Open-Meteo."
+                  : weatherErr
+                    ? "Gagal memuat data cuaca Open-Meteo."
+                    : "Memuat data angin Open-Meteo...")}
+            </p>
+            {(weatherMode === "temp" || weatherMode === "feels") &&
+              weatherGrid && (
+                <div className="space-y-0.5 rounded-xl border border-card-border bg-black/20 p-2.5">
+                  <div
+                    className="h-2 w-full rounded-full"
+                    style={{ background: tempColorbarCss() }}
+                  />
+                  <div className="flex justify-between text-[9px] font-semibold text-fg-muted">
+                    <span>
+                      {TEMP_RANGES[weatherMode].min}
+                      {TEMP_RANGES[weatherMode].unit}
+                    </span>
+                    <span className="text-fg">
+                      {TEMP_RANGES[weatherMode].label}
+                    </span>
+                    <span>
+                      {TEMP_RANGES[weatherMode].max}
+                      {TEMP_RANGES[weatherMode].unit}
+                    </span>
+                  </div>
+                </div>
+              )}
+          </div>
+
+          {!DEMO_CUACA && (
+          <>
+
           {/* status gunung sumber abu */}
           {plumeSource && (
             <div className="mb-3 flex items-start gap-2 rounded-xl border border-card-border bg-black/20 p-2.5">
@@ -569,121 +476,6 @@ export default function MonevMap() {
               </div>
             </div>
           )}
-
-          {/* overlay citra satelit & model cuaca ala Zoom Earth */}
-          <div className="mb-4 space-y-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
-              <CloudSun className="h-3.5 w-3.5" /> Cuaca & Citra Satelit
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {OVERLAY_GROUPS.map((g) => (
-                <label key={g.label} className="block">
-                  <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide text-fg-muted">
-                    {g.label}
-                  </span>
-                  <select
-                    value={
-                      g.options.some((o) => o.key === overlay)
-                        ? overlay
-                        : "none"
-                    }
-                    onChange={(e) => setOverlay(e.target.value as OverlayKey)}
-                    className="w-full rounded-lg border border-card-border bg-white/5 px-1.5 py-1.5 text-[10px] font-semibold text-fg outline-none focus:border-accent [&>option]:bg-zinc-900"
-                  >
-                    {g.options.map((o) => (
-                      <option key={o.key} value={o.key}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-            <p className="text-[10px] leading-relaxed text-fg-muted">
-              {overlay === "none" &&
-                "Overlay nonaktif. Pilih layer — satu overlay aktif seperti Zoom Earth."}
-              {isGibsOverlay(overlay) &&
-                `${GIBS_LAYERS[overlay].label} — ${
-                  overlay === "satellite"
-                    ? "real-time tiap ~10 menit"
-                    : "data harian terbaru (jeda ~1–2 hari)"
-                }. Sumber: NASA GIBS.`}
-              {overlay === "radar" &&
-                (radarUrl
-                  ? "Radar hujan komposit global, update ~10 menit. Sumber: RainViewer."
-                  : "Memuat tile radar RainViewer...")}
-              {isWeatherOverlay(overlay) &&
-                (grid
-                  ? `${WEATHER_LAYERS[overlay].label} — model Open-Meteo saat ini, grid Asia Tenggara.`
-                  : gridErr
-                    ? "Gagal memuat data model Open-Meteo."
-                    : "Memuat grid model Open-Meteo...")}
-            </p>
-
-            {/* linimasa animasi — hanya layer GIBS */}
-            {isGibsOverlay(overlay) && (
-              <div className="space-y-1.5 rounded-xl border border-card-border bg-black/20 p-2.5">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!playing && frameIdx === -1) setFrameIdx(0);
-                      setPlaying((p) => !p);
-                    }}
-                    aria-label={playing ? "Jeda animasi" : "Putar animasi"}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25"
-                  >
-                    {playing ? (
-                      <Pause className="h-3.5 w-3.5" />
-                    ) : (
-                      <Play className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(frames.length - 1, 0)}
-                    step={1}
-                    value={frameIdx === -1 ? frames.length - 1 : frameIdx}
-                    onChange={(e) => {
-                      setPlaying(false);
-                      setFrameIdx(Number(e.target.value));
-                    }}
-                    aria-label="Linimasa citra satelit"
-                    className="h-1 min-w-0 flex-1 cursor-pointer accent-sky-400"
-                  />
-                </div>
-                <p className="text-center text-[10px] font-semibold text-fg">
-                  {frameIdx === -1
-                    ? "Data terbaru — geser slider untuk melihat waktu lampau"
-                    : frameLabel(overlayTime)}
-                </p>
-              </div>
-            )}
-
-            {/* colorbar legenda — hanya layer model cuaca */}
-            {isWeatherOverlay(overlay) && grid && (
-              <div className="space-y-0.5 rounded-xl border border-card-border bg-black/20 p-2.5">
-                <div
-                  className="h-2 w-full rounded-full"
-                  style={{ background: colorbarCss(overlay) }}
-                />
-                <div className="flex justify-between text-[9px] font-semibold text-fg-muted">
-                  <span>
-                    {WEATHER_LAYERS[overlay].min}
-                    {WEATHER_LAYERS[overlay].unit}
-                  </span>
-                  <span className="text-fg">
-                    {WEATHER_LAYERS[overlay].label}
-                  </span>
-                  <span>
-                    {WEATHER_LAYERS[overlay].max}
-                    {WEATHER_LAYERS[overlay].unit}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* info angin + boost */}
           <div className="mb-4 space-y-1.5">
@@ -786,11 +578,13 @@ export default function MonevMap() {
               Hotspot satelit belum diaktifkan. Marker saat ini berasal dari laporan PetaBencana.
             </p>
           )}
+          </>
+          )}
         </div>
       )}
 
       {/* legenda — bisa disembunyikan */}
-      {!mapOnly && !legendOpen && (
+      {!DEMO_CUACA && !mapOnly && !legendOpen && (
         <button
           type="button"
           onClick={() => setLegendOpen(true)}
@@ -800,7 +594,7 @@ export default function MonevMap() {
           <Info className="h-4 w-4" />
         </button>
       )}
-      {!mapOnly && legendOpen && (
+      {!DEMO_CUACA && !mapOnly && legendOpen && (
         <div className="absolute bottom-3 left-3 z-[500] space-y-1 rounded-xl glass-panel px-3 py-2 text-[10px] shadow-lg">
           <div className="flex items-center justify-between gap-3">
             <p className="font-bold text-fg">Legenda</p>
@@ -826,9 +620,6 @@ export default function MonevMap() {
             <Flame className="h-3 w-3 text-emerald-500" /> Api hijau = terkonfirmasi silang multi-sumber
           </p>
           <p className="flex items-center gap-1.5 text-fg-muted">
-            <Wind className="h-3 w-3 text-sky-400" /> Aliran angin real-time
-          </p>
-          <p className="flex items-center gap-1.5 text-fg-muted">
             <span className="inline-block h-2.5 w-2.5 rounded-sm bg-purple-500/40" />
             Kerucut = sebaran abu
           </p>
@@ -841,7 +632,7 @@ export default function MonevMap() {
         </div>
       )}
 
-      {loading && !mapOnly && (
+      {loading && !mapOnly && !DEMO_CUACA && (
         <div className="absolute inset-x-0 top-3 z-[500] mx-auto w-fit rounded-full glass-panel px-4 py-1.5 text-xs text-fg-muted shadow-lg">
           Memuat data BMKG &amp; PVMBG...
         </div>

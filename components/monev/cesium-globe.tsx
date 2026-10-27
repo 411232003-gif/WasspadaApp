@@ -9,6 +9,7 @@ import {
   MapPin,
   ShieldAlert,
   ShieldCheck,
+  Thermometer,
   X,
 } from "lucide-react";
 import { reverseGeocode } from "@/lib/place-name";
@@ -20,23 +21,13 @@ import {
 } from "@/lib/live-api";
 import type { FireDetection } from "@/lib/fire-detections";
 import { ALERT_LEVELS } from "@/lib/alert-context";
-/** Spesifikasi overlay citra di atas basemap — dibangun oleh monev-map. */
-export type OverlaySpec =
-  | {
-      kind: "tile";
-      url: string;
-      maxZoom: number;
-      alpha: number;
-      credit: string;
-    }
-  | {
-      kind: "image";
-      url: string;
-      alpha: number;
-      rect: { west: number; south: number; east: number; north: number };
-    }
-  | null;
-
+import {
+  sampleTemp,
+  sampleWind,
+  windRgba,
+  WEATHER_RECT,
+  type WeatherPoint,
+} from "@/lib/weather-overlay";
 /* ---------- pemuat Cesium UMD (satu kali) ---------- */
 let cesiumPromise: Promise<any> | null = null;
 function loadCesium(): Promise<any> {
@@ -61,19 +52,19 @@ function loadCesium(): Promise<any> {
   return cesiumPromise;
 }
 
-const TILE_URLS: Record<string, { url: string; credit: string }> = {
-  osm: {
-    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    credit: "© OpenStreetMap contributors",
-  },
-  "esri-street": {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-    credit: "© Esri | OpenStreetMap, Garmin, FAO, NOAA, USGS",
-  },
-  "esri-sat": {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    credit: "© Esri | Maxar, Earthstar Geographics",
-  },
+const SAT_TILE = {
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  credit: "© Esri | Maxar, Earthstar Geographics",
+};
+/* label nama tempat + garis jalan di atas citra satelit — overlay
+   referensi resmi Esri (pasangan resmi basemap "hybrid" Esri) */
+const LABEL_TILE = {
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+  credit: "© Esri",
+};
+const ROAD_TILE = {
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+  credit: "© Esri",
 };
 
 export interface GlobeLayers {
@@ -81,7 +72,6 @@ export interface GlobeLayers {
   earthquakes: boolean;
   fires: boolean;
   krb: boolean;
-  wind: boolean;
   plume: boolean;
   evacuation: boolean;
   kelurahan: boolean;
@@ -104,14 +94,19 @@ interface Props {
   centerName: string;
   safeZone: [number, number];
   plume: [number, number][];
-  windLines: [number, number][][];
   /** pusat zona KRB (sumber abu / fallback lokasi pantauan) */
   krbCenter: [number, number] | null;
   layers: GlobeLayers;
-  /** overlay citra satelit/radar/model cuaca di atas basemap */
-  overlay: OverlaySpec;
   /** sembunyikan semua UI overlay di atas globe (mode peta penuh) */
   mapOnly: boolean;
+  /** gambar gradasi suhu menutupi kotak wilayah (null = mati) */
+  tempImage?: { url: string; rect: typeof WEATHER_RECT } | null;
+  /** grid vektor angin untuk animasi partikel (null/[] = mati) */
+  windField?: WeatherPoint[] | null;
+  /** grid cuaca untuk probe suhu saat peta diklik (null = mati) */
+  probeGrid?: WeatherPoint[] | null;
+  /** tampilkan banner status ancaman (dimatikan saat mode demo cuaca) */
+  showBanner?: boolean;
 }
 
 function fireColorHex(d: FireDetection): string {
@@ -211,22 +206,40 @@ export default function CesiumGlobe({
   centerName,
   safeZone,
   plume,
-  windLines,
   krbCenter,
   layers,
-  overlay,
   mapOnly,
+  tempImage = null,
+  windField = null,
+  probeGrid = null,
+  showBanner = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
   const dataSourceRef = useRef<any>(null);
-  const overlayRef = useRef<any>(null);
+  const tempLayerRef = useRef<any>(null);
+  const windCanvasRef = useRef<HTMLCanvasElement>(null);
+
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GlobeInfo | null>(null);
   const [bannerOpen, setBannerOpen] = useState(true);
-  /* ref selalu berisi overlay terbaru — mencegah gambar async basi */
-  const overlayPropRef = useRef(overlay);
+  /* hasil probe suhu saat peta diklik pada area kosong */
+  const [probe, setProbe] = useState<{
+    lat: number;
+    lon: number;
+    temp: number;
+    feels: number;
+  } | null>(null);
+  const [prevProbeGrid, setPrevProbeGrid] = useState(probeGrid);
+  if (probeGrid !== prevProbeGrid) {
+    setPrevProbeGrid(probeGrid);
+    setProbe(null);
+  }
+  const probeGridRef = useRef(probeGrid);
+  useEffect(() => {
+    probeGridRef.current = probeGrid;
+  }, [probeGrid]);
 
   /* ---------- tingkat ancaman di sekitar lokasi pantauan ---------- */
   const threats = useMemo(() => {
@@ -302,14 +315,132 @@ export default function CesiumGlobe({
         viewer.scene.globe.showGroundAtmosphere = true;
         viewer.scene.skyAtmosphere.show = true;
 
+        /* HEMAT CPU/GPU: render hanya saat ada perubahan (geser/data),
+           bukan 60fps terus-menerus — solusi utama lag di laptop & HP */
+        viewer.scene.requestRenderMode = true;
+        viewer.scene.maximumRenderTimeChange = Infinity;
+
         dataSourceRef.current = new Cesium.CustomDataSource("wasspada");
         viewer.dataSources.add(dataSourceRef.current);
 
+        /* clustering: titik yang bertumpuk digabung jadi pin bernomor —
+           zoom out terlihat jumlah, zoom in terpisah sendiri-sendiri */
+        const cds = dataSourceRef.current;
+        cds.clustering.enabled = true;
+        cds.clustering.pixelRange = 44;
+        cds.clustering.minimumClusterSize = 4;
+        cds.clustering.clusterBillboards = true;
+        cds.clustering.clusterLabels = true;
+        cds.clustering.clusterPoints = true;
+        const pinCache = new Map<number, HTMLCanvasElement>();
+        const clusterPin = (n: number) => {
+          let c = pinCache.get(n);
+          if (!c) {
+            c = document.createElement("canvas");
+            c.width = c.height = 64;
+            const g = c.getContext("2d");
+            if (g) {
+              g.beginPath();
+              g.arc(32, 32, 28, 0, Math.PI * 2);
+              g.fillStyle = "rgba(234,88,12,0.95)";
+              g.fill();
+              g.lineWidth = 4;
+              g.strokeStyle = "#ffffff";
+              g.stroke();
+              g.font = "bold 28px sans-serif";
+              g.textAlign = "center";
+              g.textBaseline = "middle";
+              g.fillStyle = "#ffffff";
+              g.fillText(String(n), 32, 33);
+            }
+            pinCache.set(n, c);
+          }
+          return c;
+        };
+        cds.clustering.clusterEvent.addEventListener(
+          (ents: any[], cluster: any) => {
+            cluster.label.show = false;
+            cluster.billboard.show = true;
+            cluster.billboard.image = clusterPin(ents.length);
+            cluster.billboard.width = 34;
+            cluster.billboard.height = 34;
+            cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.CENTER;
+            cluster.billboard.disableDepthTestDistance =
+              Number.POSITIVE_INFINITY;
+          }
+        );
+
         handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
         handler.setInputAction((movement: any) => {
-          const picked = viewer.scene.pick(movement.position);
-          const info = picked?.id?.wasspadaInfo as GlobeInfo | undefined;
+          /* drillPick memeriksa SEMUA objek di titik klik —
+             billboard cluster sering terlewat oleh pick biasa */
+          const pickedList = viewer.scene.drillPick(movement.position);
+          const picked = pickedList?.[0];
+          /* pin cluster = billboard/label tanpa wasspadaInfo */
+          let clusterPos: any = null;
+          for (const p of pickedList ?? []) {
+            const pid = p?.id ?? p?.primitive?.id;
+            if (
+              pid &&
+              !pid.wasspadaInfo &&
+              (pid.billboard || pid.label || pid.clusteredEntities)
+            ) {
+              clusterPos = pid;
+              break;
+            }
+          }
+          if (clusterPos) {
+            const pos =
+              clusterPos.position?.getValue?.(viewer.clock.currentTime) ??
+              viewer.camera.pickEllipsoid(
+                movement.position,
+                viewer.scene.globe.ellipsoid
+              );
+            if (pos) {
+              const c = Cesium.Cartographic.fromCartesian(pos);
+              const height = Math.max(
+                150000,
+                viewer.camera.positionCartographic.height * 0.35
+              );
+              viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromRadians(
+                  c.longitude,
+                  c.latitude,
+                  height
+                ),
+                duration: 1.1,
+              });
+            }
+            setSelected(null);
+            setProbe(null);
+            return;
+          }
+          const pid = picked?.id ?? picked?.primitive?.id;
+          const info = pid?.wasspadaInfo as GlobeInfo | undefined;
           setSelected(info ?? null);
+          /* probe suhu saat klik area kosong pada mode Suhu */
+          if (info) {
+            setProbe(null);
+            return;
+          }
+          const grid = probeGridRef.current;
+          if (grid && grid.length) {
+            const cart = viewer.camera.pickEllipsoid(
+              movement.position,
+              viewer.scene.globe.ellipsoid
+            );
+            if (cart) {
+              const c = Cesium.Cartographic.fromCartesian(cart);
+              const lat = Cesium.Math.toDegrees(c.latitude);
+              const lon = Cesium.Math.toDegrees(c.longitude);
+              const t = sampleTemp(grid, lat, lon);
+              if (t != null) {
+                setProbe({ lat, lon, temp: t.temp, feels: t.feels });
+                return;
+              }
+            }
+          }
+          setProbe(null);
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
         if (!cancelled) setReady(true);
@@ -330,7 +461,7 @@ export default function CesiumGlobe({
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     loadCesium().then((Cesium) => {
-      const tile = TILE_URLS["esri-sat"];
+      const tile = SAT_TILE;
       viewer.imageryLayers.removeAll(true);
       viewer.imageryLayers.addImageryProvider(
         new Cesium.UrlTemplateImageryProvider({
@@ -338,56 +469,173 @@ export default function CesiumGlobe({
           credit: tile.credit,
         })
       );
+      /* label nama tempat + garis jalan di atas citra satelit */
+      for (const t of [LABEL_TILE, ROAD_TILE]) {
+        viewer.imageryLayers.addImageryProvider(
+          new Cesium.UrlTemplateImageryProvider({
+            url: t.url,
+            credit: t.credit,
+          })
+        );
+      }
+      viewer.scene.requestRender();
     });
   }, [ready]);
 
-  /* ---------- overlay citra (GIBS tile / radar / gambar model) ---------- */
+  /* ---------- overlay gradasi suhu (SingleTileImageryProvider) ---------- */
   useEffect(() => {
-    overlayPropRef.current = overlay;
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     loadCesium().then((Cesium) => {
-      if (overlayRef.current) {
-        viewer.imageryLayers.remove(overlayRef.current, true);
-        overlayRef.current = null;
+      if (tempLayerRef.current) {
+        viewer.imageryLayers.remove(tempLayerRef.current, true);
+        tempLayerRef.current = null;
       }
-      if (!overlay) return;
-      if (overlay.kind === "tile") {
-        const layer = viewer.imageryLayers.addImageryProvider(
-          new Cesium.UrlTemplateImageryProvider({
-            url: overlay.url,
-            credit: overlay.credit,
-            maximumLevel: overlay.maxZoom,
-            tilingScheme: new Cesium.WebMercatorTilingScheme(),
-          })
-        );
-        layer.alpha = overlay.alpha;
-        overlayRef.current = layer;
+      if (!tempImage) {
+        viewer.scene.requestRender();
         return;
       }
-      /* overlay model cuaca: gambar canvas di atas kotak wilayah.
-         Pakai fromUrl (async) — konstruktor lama didepresiasi di Cesium baru. */
-      const rect = Cesium.Rectangle.fromDegrees(
-        overlay.rect.west,
-        overlay.rect.south,
-        overlay.rect.east,
-        overlay.rect.north
-      );
+      const spec = tempImage;
       Promise.resolve(
-        Cesium.SingleTileImageryProvider.fromUrl(overlay.url, {
-          rectangle: rect,
+        Cesium.SingleTileImageryProvider.fromUrl(spec.url, {
+          rectangle: Cesium.Rectangle.fromDegrees(
+            spec.rect.west,
+            spec.rect.south,
+            spec.rect.east,
+            spec.rect.north
+          ),
         })
       )
         .then((provider: any) => {
-          if (viewer.isDestroyed() || overlayPropRef.current !== overlay)
-            return;
+          if (viewer.isDestroyed() || tempImage !== spec) return;
           const layer = viewer.imageryLayers.addImageryProvider(provider);
-          layer.alpha = overlay.alpha;
-          overlayRef.current = layer;
+          layer.alpha = 0.65;
+          tempLayerRef.current = layer;
+          viewer.scene.requestRender();
         })
         .catch(() => {});
     });
-  }, [overlay, ready]);
+  }, [tempImage, ready]);
+
+  /* ---------- animasi partikel angin ala Zoom Earth ---------- */
+  useEffect(() => {
+    if (!windField || windField.length === 0 || !ready) return;
+    const viewer = viewerRef.current;
+    const canvas = windCanvasRef.current;
+    if (!viewer || viewer.isDestroyed() || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let raf = 0;
+    let cancelled = false;
+    let cleanupMove: (() => void) | null = null;
+    let cleanupResize: (() => void) | null = null;
+
+    loadCesium().then((Cesium) => {
+      if (cancelled) return;
+      const scene = viewer.scene;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const resize = () => {
+        canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+        canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+      };
+      resize();
+      window.addEventListener("resize", resize);
+      cleanupResize = () => window.removeEventListener("resize", resize);
+
+      /* bersihkan jejak saat kamera mulai digeser agar tidak streak */
+      const onMoveStart = () =>
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      viewer.camera.moveStart.addEventListener(onMoveStart);
+      cleanupMove = () =>
+        viewer.camera.moveStart.removeEventListener(onMoveStart);
+
+      const { west, south, east, north } = WEATHER_RECT;
+      const N = window.innerWidth < 768 ? 650 : 1700;
+      const spawn = () => ({
+        lat: south + Math.random() * (north - south),
+        lon: west + Math.random() * (east - west),
+        age: 0,
+        max: 60 + Math.random() * 120,
+        x: -1,
+        y: -1,
+      });
+      const parts = Array.from({ length: N }, spawn);
+      const ellipsoid = scene.globe.ellipsoid;
+      const occluder = new Cesium.EllipsoidalOccluder(
+        ellipsoid,
+        Cesium.Cartesian3.ORIGIN
+      );
+      const scratch = new Cesium.Cartesian3();
+      const toScreen =
+        Cesium.SceneTransforms.worldToWindowCoordinates ??
+        Cesium.SceneTransforms.wgs84ToWindowCoordinates;
+      /* derajat/frame per m/s — disetel agar terasa seperti Zoom Earth */
+      const K = 0.0045;
+      const MAX_JUMP = 90 * dpr;
+
+      const step = () => {
+        if (cancelled) return;
+        raf = requestAnimationFrame(step);
+        /* jejak memudar */
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.lineWidth = Math.max(0.8, dpr * 0.7);
+
+        occluder.cameraPosition = scene.camera.position;
+        const is3d = scene.mode === Cesium.SceneMode.SCENE3D;
+
+        for (const p of parts) {
+          const w = sampleWind(windField, p.lat, p.lon);
+          p.age++;
+          if (
+            !w ||
+            p.age > p.max ||
+            p.lat < south ||
+            p.lat > north ||
+            p.lon < west ||
+            p.lon > east
+          ) {
+            Object.assign(p, spawn());
+            continue;
+          }
+          p.lat += w.v * K;
+          p.lon += (w.u * K) / Math.max(0.2, Math.cos((p.lat * Math.PI) / 180));
+
+          Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 0, ellipsoid, scratch);
+          const scr = toScreen(scene, scratch);
+          const visible =
+            scr && (!is3d || occluder.isPointVisible(scratch));
+          if (!visible) {
+            p.x = -1;
+            continue;
+          }
+          const sx = scr.x * dpr;
+          const sy = scr.y * dpr;
+          if (p.x >= 0 && Math.hypot(sx - p.x, sy - p.y) < MAX_JUMP) {
+            ctx.strokeStyle = windRgba(w.gust);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(sx, sy);
+            ctx.stroke();
+          }
+          p.x = sx;
+          p.y = sy;
+        }
+      };
+      raf = requestAnimationFrame(step);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      cleanupMove?.();
+      cleanupResize?.();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [windField, ready]);
 
   /* ---------- kamera mengikuti lokasi pantauan ---------- */
   useEffect(() => {
@@ -458,6 +706,58 @@ export default function CesiumGlobe({
             outlineWidth: 2,
           },
         });
+      /* ikon SVG vektor berwarna — tidak bergantung font emoji OS */
+      const ICON_FIRE = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M32 6c6 8 14 13 14 26 0 11-9 20-14 20s-14-9-14-20c0-6 2-11 5-14 1 6 4 9 7 10-1-9 4-18 8-22z" fill="#ff6a00" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M32 24c3 5 7 8 7 15a7 7 0 11-14 0c0-4 2-7 4-9 1 4 3 6 5 7-1-6-1-9-2-13z" fill="#ffd500"/></svg>`
+      )}`;
+      const ICON_VOLCANO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M6 54L24 20l6 8 8-14 20 40z" fill="#8d5524" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><path d="M24 20l6 8-3 4-6-3z" fill="#fff"/><path d="M38 14l5 8-4 3-5-5z" fill="#fff"/></svg>`
+      )}`;
+      /* ikon di atas titik — ikut bisa diklik */
+      const addIcon = (
+        lat: number,
+        lon: number,
+        image: string,
+        px: number,
+        info: GlobeInfo
+      ) => {
+        const e = ds.entities.add({
+          position: deg(lat, lon),
+          billboard: {
+            image,
+            width: px,
+            height: px,
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        });
+        e.wasspadaInfo = info;
+        return e;
+      };
+      /* label teks di atas titik — ikut bisa diklik */
+      const addMarkerLabel = (
+        lat: number,
+        lon: number,
+        text: string,
+        fontPx: number,
+        info: GlobeInfo
+      ) => {
+        const e = ds.entities.add({
+          position: deg(lat, lon),
+          label: {
+            text,
+            font: `${fontPx}px sans-serif`,
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -14),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        });
+        e.wasspadaInfo = info;
+        return e;
+      };
 
       /* lokasi pantauan + cincin ancaman */
       if (layers.kelurahan) {
@@ -472,12 +772,11 @@ export default function CesiumGlobe({
         addRing(center[0], center[1], 12, threatColor, 0.1);
       }
 
-      /* gunung api + KRB */
+      /* gunung api + KRB — ikon 🌋 agar mudah dikenali & diklik */
       if (layers.volcanoes) {
         for (const v of volcanoes) {
           if (v.lat == null || v.lon == null) continue;
-          const color = ALERT_LEVELS[v.level]?.color ?? "#f97316";
-          addPoint(v.lat, v.lon, color, 10 + v.level, {
+          const info: GlobeInfo = {
             title: v.name,
             source: "PVMBG / MAGMA Indonesia",
             verified: true,
@@ -487,7 +786,8 @@ export default function CesiumGlobe({
             ].filter(Boolean),
             lat: v.lat,
             lon: v.lon,
-          });
+          };
+          addIcon(v.lat, v.lon, ICON_VOLCANO, 22, info);
         }
       }
 
@@ -514,7 +814,7 @@ export default function CesiumGlobe({
             Math.max(mag * 2.5 * Math.max(0.3, 1 - (e.depthKm ?? 0) / 300), 3),
             40
           );
-          addPoint(lat, lon, color, 9, {
+          const eqInfo: GlobeInfo = {
             title: `Gempa M${e.magnitude ?? "-"}`,
             source: "BMKG",
             verified: true,
@@ -531,17 +831,19 @@ export default function CesiumGlobe({
             ].filter(Boolean),
             lat,
             lon,
-          });
+          };
+          addPoint(lat, lon, color, 12, eqInfo);
+          addMarkerLabel(lat, lon, `M${(e.magnitude ?? 0).toFixed(1)}`, 11, eqInfo);
           addRing(lat, lon, radius, color, 0.08);
         }
       }
 
-      /* titik api — warna sesuai keyakinan/verifikasi */
+      /* titik api — ikon 🔥 besar agar mudah diklik */
       if (layers.fires) {
         for (const f of fires) {
           const [lat, lon] = f.coordinates;
           const verified = (f.verifiedBy?.length ?? 0) > 0;
-          addPoint(lat, lon, fireColorHex(f), verified ? 10 : 8, {
+          const info: GlobeInfo = {
             title: f.title,
             source: f.source,
             verified,
@@ -565,7 +867,9 @@ export default function CesiumGlobe({
             ].filter(Boolean),
             lat,
             lon,
-          });
+          };
+          addPoint(lat, lon, fireColorHex(f), verified ? 14 : 12, info);
+          addIcon(lat, lon, ICON_FIRE, verified ? 22 : 18, info);
         }
       }
 
@@ -592,6 +896,7 @@ export default function CesiumGlobe({
           verified: true,
           lines: [
             `Jarak dari lokasi pantauan: ${haversineKm(center, safeZone).toFixed(1)} km`,
+            "Estimasi arah menjauhi gunung — bukan titik evakuasi resmi BNPB",
           ],
           lat: safeZone[0],
           lon: safeZone[1],
@@ -614,20 +919,7 @@ export default function CesiumGlobe({
         });
       }
 
-      /* aliran angin */
-      if (layers.wind) {
-        for (const line of windLines) {
-          ds.entities.add({
-            polyline: {
-              positions: Cesium.Cartesian3.fromDegreesArray(
-                line.flatMap(([la, lo]) => [lo, la])
-              ),
-              width: 2.5,
-              material: fromCss("#38bdf8", 0.7),
-            },
-          });
-        }
-      }
+      if (!viewer.isDestroyed()) viewer.scene.requestRender();
     });
   }, [
     ready,
@@ -638,7 +930,6 @@ export default function CesiumGlobe({
     centerName,
     safeZone,
     plume,
-    windLines,
     krbCenter,
     layers,
     threatColor,
@@ -647,6 +938,11 @@ export default function CesiumGlobe({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="absolute inset-0" />
+      {/* canvas partikel angin — di atas globe, tidak menghalangi klik */}
+      <canvas
+        ref={windCanvasRef}
+        className="pointer-events-none absolute inset-0 z-[400] h-full w-full"
+      />
 
       {!ready && !loadError && (
         <div className="absolute inset-0 z-[500] flex items-center justify-center gap-2 bg-black/60 text-white">
@@ -661,7 +957,7 @@ export default function CesiumGlobe({
       )}
 
       {/* banner status ancaman — warna penuh, tegas, bisa ditutup */}
-      {!mapOnly && bannerOpen && (
+      {showBanner && !mapOnly && bannerOpen && (
         <div
           className="absolute left-3 top-3 z-[600] flex max-w-[calc(100%-6rem)] items-start gap-2 rounded-xl border px-3 py-2 text-[12px] font-bold"
           style={{
@@ -702,7 +998,7 @@ export default function CesiumGlobe({
           </button>
         </div>
       )}
-      {!mapOnly && !bannerOpen && (
+      {showBanner && !mapOnly && !bannerOpen && (
         <button
           type="button"
           onClick={() => setBannerOpen(true)}
@@ -729,6 +1025,30 @@ export default function CesiumGlobe({
 
       {selected && (
         <GlobeInfoCard info={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {/* kartu probe suhu — klik area kosong pada mode Suhu */}
+      {probe && (
+        <div className="absolute bottom-3 left-1/2 z-[650] flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-zinc-950/95 px-4 py-2 shadow-xl">
+          <Thermometer className="h-4 w-4 shrink-0 text-orange-400" />
+          <span className="whitespace-nowrap text-[12px] font-bold text-white">
+            {probe.temp.toFixed(1)}°C
+            <span className="mx-1.5 text-[11px] font-semibold text-sky-300">
+              terasa {probe.feels.toFixed(1)}°C
+            </span>
+            <span className="text-[10px] font-semibold text-white/70">
+              {probe.lat.toFixed(2)}°, {probe.lon.toFixed(2)}°
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setProbe(null)}
+            aria-label="Tutup info suhu"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-white/80 hover:bg-white/20"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
 
       {!mapOnly && (
