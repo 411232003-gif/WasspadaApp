@@ -443,6 +443,28 @@ export default function CesiumGlobe({
           setProbe(null);
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+        /* fallback pasti-jalan: double-click di titik mana saja → zoom masuk */
+        handler.setInputAction((movement: any) => {
+          const pos = viewer.camera.pickEllipsoid(
+            movement.position,
+            viewer.scene.globe.ellipsoid
+          );
+          if (!pos) return;
+          const c = Cesium.Cartographic.fromCartesian(pos);
+          const height = Math.max(
+            120000,
+            viewer.camera.positionCartographic.height * 0.3
+          );
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromRadians(
+              c.longitude,
+              c.latitude,
+              height
+            ),
+            duration: 0.9,
+          });
+        }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
         if (!cancelled) setReady(true);
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "Error"));
